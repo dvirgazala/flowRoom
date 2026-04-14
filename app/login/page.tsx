@@ -1,11 +1,13 @@
 'use client'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS } from '@/lib/data'
 import { Music2, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
+  const router    = useRouter()
   const login     = useStore(s => s.login)
   const showToast = useStore(s => s.showToast)
 
@@ -16,22 +18,18 @@ export default function LoginPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    setTimeout(() => {
-      const user = USERS.find(u => u.email === email)
-      if (user) {
-        login(user.id)
-        window.location.href = '/feed'
-      } else {
-        showToast('אימייל או סיסמה שגויים', 'error')
-        setLoading(false)
-      }
-    }, 800)
+    const user = USERS.find(u => u.email === email)
+    if (user) {
+      login(user.id)
+      router.push('/feed')
+    } else {
+      showToast('אימייל או סיסמה שגויים', 'error')
+    }
   }
 
   const mockLogin = (userId: string) => {
     login(userId)
-    window.location.href = '/feed'
+    router.push('/feed')
   }
 
   return (
