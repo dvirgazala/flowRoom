@@ -9,12 +9,23 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
+
+const themeInitScript = `
+(function(){try{
+  var s=localStorage.getItem('flowroom-store');
+  var t='light';
+  if(s){var d=JSON.parse(s); if(d && d.state && d.state.theme) t=d.state.theme;}
+  document.documentElement.setAttribute('data-theme',t);
+}catch(e){document.documentElement.setAttribute('data-theme','light');}})();
+`
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl">
+    <html lang="he" dir="rtl" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-screen">{children}</body>
     </html>
   )

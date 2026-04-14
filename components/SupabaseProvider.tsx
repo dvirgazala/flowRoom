@@ -6,7 +6,6 @@ import { getMyProfile } from '@/lib/db'
 import type { DbProfile } from '@/lib/supabase-types'
 import type { User, Role } from '@/lib/types'
 
-// Map a Supabase profile to the legacy User shape the store expects.
 function profileToUser(p: DbProfile): User {
   const initials = p.display_name
     .split(/\s+/)
@@ -18,74 +17,65 @@ function profileToUser(p: DbProfile): User {
 
   return {
     id:             p.id,
-    name:           p.display_name,
+    name:           p.display_name || 'משתמש',
     email:          p.username + '@flowroom.app',
     role:           (p.role as Role) || 'מפיק',
-    bio:            p.bio,
-    location:       p.location,
+    bio:            p.bio || '',
+    location:       p.location || '',
     avatarColor:    'from-purple-500 to-pink-500',
     initials:       initials || '👤',
     genres:         [],
     trustScore:     85,
-    songs:          p.songs_count,
+    songs:          p.songs_count || 0,
     collabs:        0,
-    followers:      p.followers_count,
-    rating:         Number(p.rating),
+    followers:      p.followers_count || 0,
+    rating:         Number(p.rating) || 0,
     completionRate: 90,
     portfolio:      [],
     media:          [],
-    isOnline:       p.is_online,
+    isOnline:       p.is_online || false,
     joinedAt:       new Date(p.created_at).toLocaleDateString('he-IL'),
-    warnings:       p.warnings,
-    isSuspended:    p.is_suspended,
-    isVerified:     p.is_verified,
+    warnings:       p.warnings || 0,
+    isSuspended:    p.is_suspended || false,
+    isVerified:     p.is_verified || false,
   }
 }
 
-/**
- * Keeps the Zustand store in sync with Supabase Auth.
- * If no Supabase env is configured (demo mode), this is a no-op —
- * the existing mock-login flow continues to work.
- */
 export default function SupabaseProvider({ children }: { children: React.ReactNode }) {
-  const login = useStore(s => s.login)
-
   useEffect(() => {
     const hasEnv = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!hasEnv) return // demo mode — skip supabase sync
+    if (!hasEnv) return
 
     let active = true
 
     const syncSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (!active) return
-      if (data.session) {
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (!active || !data.session) return
+
         const profile = await getMyProfile()
-        if (profile) {
-          // Inject the profile into the legacy store as both currentUser and a users[] entry
-          const userShape = profileToUser(profile)
-          const store = useStore.getState()
-          const existing = store.users.find(u => u.id === userShape.id)
-          if (!existing) {
-            useStore.setState({ users: [...store.users, userShape] })
-          }
-          login(userShape.id)
-        }
+        if (!active || !profile) return
+
+        const userShape = profileToUser(profile)
+        const store = useStore.getState()
+        const others = store.users.filter(u => u.id !== userShape.id)
+        useStore.setState({
+          users:       [...others, userShape],
+          currentUser: userShape,
+        })
+      } catch (err) {
+        console.error('[SupabaseProvider] sync failed', err)
       }
     }
 
     syncSession()
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return
-      if (session) {
-        await syncSession()
-      }
-      // We don't clear currentUser on signout — the app has its own logout flow.
+      if (session) syncSession()
     })
 
     return () => { active = false; sub.subscription.unsubscribe() }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return <>{children}</>

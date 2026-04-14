@@ -5,7 +5,7 @@ import { useStore } from '@/lib/store'
 import { signOut } from '@/lib/db'
 import Avatar from './Avatar'
 import { Home, Music2, Search, ShoppingBag, LogOut, Bell, Plus, Settings, Briefcase } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const NAV = [
   { href: '/feed',        label: 'פיד',     icon: Home },
@@ -23,6 +23,26 @@ export default function Navbar() {
   const showToast = useStore(s => s.showToast)
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const notifRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen && !notifOpen) return
+    const closeAll = () => { setMenuOpen(false); setNotifOpen(false) }
+    const onClick = (e: Event) => {
+      const t = e.target as Node
+      if (notifRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      closeAll()
+    }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('touchstart', onClick)
+    window.addEventListener('scroll', closeAll, true)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('touchstart', onClick)
+      window.removeEventListener('scroll', closeAll, true)
+    }
+  }, [menuOpen, notifOpen])
 
   const handleLogout = async () => {
     await signOut().catch(() => {})
@@ -65,8 +85,8 @@ export default function Navbar() {
         </Link>
 
         {/* Notifications */}
-        <div className="relative">
-          <button onClick={() => setNotifOpen(!notifOpen)}
+        <div className="relative" ref={notifRef}>
+          <button onClick={() => { setNotifOpen(!notifOpen); setMenuOpen(false) }}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-bg3 hover:bg-bg2 transition-colors relative">
             <Bell size={16} className="text-text-secondary" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink rounded-full" />
@@ -96,7 +116,7 @@ export default function Navbar() {
 
         {/* User menu / login */}
         {currentUser ? (
-          <div className="relative">
+          <div className="relative" ref={menuRef}>
             <button onClick={() => { setMenuOpen(!menuOpen); setNotifOpen(false) }}
               className="flex items-center gap-2 p-1 rounded-full hover:ring-2 hover:ring-purple/40 transition-all">
               <Avatar user={currentUser} size="sm" showOnline />

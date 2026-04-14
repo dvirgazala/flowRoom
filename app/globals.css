@@ -17,22 +17,8 @@
   --shadow-card: 0 4px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
-/* ── Dark theme (default) ─────────────────────────────────────────────────── */
+/* ── Light theme (default) ────────────────────────────────────────────────── */
 :root,
-html[data-theme="dark"] {
-  --bg0: #07071a;
-  --bg1: #0e0e24;
-  --bg2: #151530;
-  --bg3: #1e1e3c;
-  --border-col: #252545;
-  --text-primary: #eeeef4;
-  --text-secondary: #9b9eb0;
-  --text-muted: #626576;
-  --shadow-s: 0 2px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
-  --shadow-s-lg: 0 8px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.05);
-}
-
-/* ── Light theme ──────────────────────────────────────────────────────────── */
 html[data-theme="light"] {
   --bg0: #f0f0fa;
   --bg1: #ffffff;
@@ -46,8 +32,30 @@ html[data-theme="light"] {
   --shadow-s-lg: 0 8px 48px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.07);
 }
 
+/* ── Dark theme ───────────────────────────────────────────────────────────── */
+html[data-theme="dark"] {
+  --bg0: #07071a;
+  --bg1: #0e0e24;
+  --bg2: #151530;
+  --bg3: #1e1e3c;
+  --border-col: #252545;
+  --text-primary: #eeeef4;
+  --text-secondary: #9b9eb0;
+  --text-muted: #626576;
+  --shadow-s: 0 2px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+  --shadow-s-lg: 0 8px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
 * { box-sizing: border-box; }
 html { direction: rtl; }
+
+/* Prevent iOS Safari auto-zoom on input focus (inputs < 16px trigger zoom) */
+input, textarea, select {
+  font-size: 16px;
+}
+@media (min-width: 640px) {
+  input, textarea, select { font-size: inherit; }
+}
 
 body {
   background: var(--bg0);
@@ -144,16 +152,13 @@ button:focus-visible {
 }
 
 /* ── Figma Design System: Subtle borders (dark theme) ───────────────────────── */
-html[data-theme="dark"] .border-border,
-:root:not([data-theme="light"]) .border-border {
+html[data-theme="dark"] .border-border {
   border-color: rgba(255, 255, 255, 0.06) !important;
 }
-html[data-theme="dark"] .border-border\/60,
-:root:not([data-theme="light"]) .border-border\/60 {
+html[data-theme="dark"] .border-border\/60 {
   border-color: rgba(255, 255, 255, 0.04) !important;
 }
-html[data-theme="dark"] .border-border\/50,
-:root:not([data-theme="light"]) .border-border\/50 {
+html[data-theme="dark"] .border-border\/50 {
   border-color: rgba(255, 255, 255, 0.04) !important;
 }
 
@@ -164,8 +169,8 @@ html[data-theme="dark"] .border-border\/50,
   border-radius: 1rem;
 }
 
-/* Navbar: pure dark with no visible border */
-nav.fixed {
+/* Navbar: dark theme variant */
+html[data-theme="dark"] nav.fixed {
   border-bottom-color: rgba(255, 255, 255, 0.05) !important;
   background: rgba(7, 7, 26, 0.96) !important;
 }

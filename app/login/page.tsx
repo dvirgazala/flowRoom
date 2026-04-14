@@ -3,15 +3,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { USERS } from '@/lib/data'
-import { signIn, signInWithOAuth } from '@/lib/db'
+import { signIn } from '@/lib/db'
 import { Music2, Eye, EyeOff } from 'lucide-react'
-
-const HAS_SUPABASE = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 export default function LoginPage() {
   const router    = useRouter()
-  const login     = useStore(s => s.login)
   const showToast = useStore(s => s.showToast)
 
   const [email,    setEmail]    = useState('')
@@ -23,51 +19,23 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
-    if (HAS_SUPABASE) {
-      const { error } = await signIn(email, password)
-      if (error) {
-        showToast(error.message || 'אימייל או סיסמה שגויים', 'error')
-        setLoading(false)
-        return
-      }
-      // SupabaseProvider syncs profile → store.currentUser on auth change
-      router.push('/feed')
+    const { error } = await signIn(email, password)
+    if (error) {
+      showToast(error.message || 'אימייל או סיסמה שגויים', 'error')
+      setLoading(false)
       return
     }
-
-    // Demo fallback when Supabase isn't configured
-    const user = USERS.find(u => u.email === email)
-    if (user) {
-      login(user.id)
-      router.push('/feed')
-    } else {
-      showToast('אימייל או סיסמה שגויים', 'error')
-      setLoading(false)
-    }
-  }
-
-  const mockLogin = (userId: string) => {
-    login(userId)
     router.push('/feed')
-  }
-
-  const oauthLogin = async (provider: 'google' | 'facebook' | 'apple') => {
-    if (!HAS_SUPABASE) { mockLogin('u1'); return }
-    const { error } = await signInWithOAuth(provider)
-    if (error) showToast(error.message || 'שגיאה בהתחברות', 'error')
-    // On success, Supabase redirects → /feed via redirectTo
   }
 
   return (
     <div className="min-h-screen bg-bg0 flex items-center justify-center p-4">
-      {/* Background glow */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-purple/10 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink/8 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-md fade-in">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-3">
             <div className="w-10 h-10 rounded-xl bg-brand-gradient flex items-center justify-center shadow-glow">
@@ -82,7 +50,7 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold mb-1">התחבר לחשבון</h1>
           <p className="text-text-muted text-sm mb-6">ברוך הבא בחזרה</p>
 
-          <form onSubmit={handleLogin} className="space-y-4 mb-6">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">אימייל</label>
               <input value={email} onChange={e => setEmail(e.target.value)}
@@ -116,41 +84,6 @@ export default function LoginPage() {
               {loading ? 'מתחבר...' : 'התחבר'}
             </button>
           </form>
-
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-text-muted text-xs">או המשך עם</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-
-          <div className="flex justify-center gap-4 mb-6">
-            {[
-              { icon: 'G', bg: 'bg-white',                         text: 'text-gray-700', provider: 'google'   as const, font: 'font-bold text-base' },
-              { icon: 'f', bg: 'bg-[#1877F2]',                     text: 'text-white',    provider: 'facebook' as const, font: 'font-bold text-lg' },
-              { icon: '🍎',bg: 'bg-black border border-border',    text: 'text-white',    provider: 'apple'    as const, font: 'text-lg' },
-            ].map(p => (
-              <button type="button" key={p.provider} onClick={() => oauthLogin(p.provider)}
-                className={`w-12 h-12 rounded-xl ${p.bg} ${p.text} ${p.font} flex items-center justify-center hover:opacity-85 active:scale-95 transition-all shadow-sm`}>
-                {p.icon}
-              </button>
-            ))}
-          </div>
-
-          <div className="pt-5 border-t border-border">
-            <p className="text-xs text-text-muted mb-3 text-center">כניסה מהירה לבדיקות:</p>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'u1', label: 'אבי — מפיק' },
-                { id: 'u3', label: 'יעל — זמרת' },
-                { id: 'u9', label: 'רחל — מיקס' },
-              ].map(u => (
-                <button type="button" key={u.id} onClick={() => mockLogin(u.id)}
-                  className="py-2.5 px-3 bg-bg3 hover:bg-bg2 border border-border rounded-lg text-xs text-text-secondary hover:text-text-primary transition-colors active:scale-95">
-                  {u.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <p className="text-center text-sm text-text-muted mt-6">

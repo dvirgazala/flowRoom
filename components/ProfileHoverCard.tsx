@@ -14,6 +14,7 @@ interface Props {
 
 export default function ProfileHoverCard({ userId, children }: Props) {
   const [mounted, setMounted] = useState(false)
+  const [isTouch, setIsTouch] = useState(false)
   const [show, setShow] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -21,7 +22,11 @@ export default function ProfileHoverCard({ userId, children }: Props) {
   const user = getUserById(userId)
 
   // Mark as mounted (client-only) so portal doesn't cause hydration mismatch
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+    // Detect touch-primary device: disable hover card on mobile, tap navigates directly
+    setIsTouch(window.matchMedia('(hover: none), (pointer: coarse)').matches)
+  }, [])
 
   // Clean up timer on unmount
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
@@ -58,6 +63,15 @@ export default function ProfileHoverCard({ userId, children }: Props) {
   }
 
   if (!user) return <>{children}</>
+
+  // On mobile, skip the hover popup entirely — tap on username should just navigate
+  if (isTouch) {
+    return (
+      <Link href={`/profile/${userId}`} className="inline-block">
+        {children}
+      </Link>
+    )
+  }
 
   const card = show ? (
     <div

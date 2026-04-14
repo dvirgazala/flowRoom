@@ -475,9 +475,8 @@ export default function FeedPage() {
           if (!author) return null
 
           const allComments = [...(post.comments || [])].sort((a, b) => (b.likes || 0) - (a.likes || 0))
-          const isExpanded = expandedComments[post.id] || false
-          const visibleComments = isExpanded ? allComments : allComments.slice(0, 2)
-          const hasMore = allComments.length > 2
+          const isOpen = expandedComments[post.id] || false
+          const visibleComments = allComments
 
           return (
             <div key={post.id} className="bg-bg1 rounded-2xl shadow-surface overflow-hidden fade-in hover:shadow-glow transition-all duration-200">
@@ -549,12 +548,12 @@ export default function FeedPage() {
                     <span>{post.likes}</span>
                   </button>
                   <button
-                    onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: !isExpanded }))}
+                    onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: !isOpen }))}
                     className="flex items-center gap-1.5 text-xs text-text-muted hover:text-info active:scale-95 transition-all py-2 px-3 sm:px-0 rounded-lg sm:rounded-none hover:bg-bg3 sm:hover:bg-transparent">
                     <MessageCircle size={17} />
                     <span>{allComments.length}</span>
                   </button>
-                  <button onClick={() => { navigator.clipboard?.writeText(window.location.href); showToast('הקישור הועתק', 'info') }}
+                  <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/posts/${post.id}`); showToast('הקישור הועתק', 'info') }}
                     className="flex items-center gap-1.5 text-xs text-text-muted hover:text-success active:scale-95 transition-all py-2 px-3 sm:px-0 rounded-lg sm:rounded-none hover:bg-bg3 sm:hover:bg-transparent">
                     <Share2 size={17} />
                     <span className="hidden sm:inline">שתף</span>
@@ -562,8 +561,8 @@ export default function FeedPage() {
                 </div>
               </div>
 
-              {/* ── Inline comments ──────────────────────────────────────── */}
-              {allComments.length > 0 && (
+              {/* ── Inline comments (toggle via comment icon) ─────────────── */}
+              {isOpen && allComments.length > 0 && (
                 <div className="border-t border-border/40 bg-bg2/40 px-4 pt-3 pb-2 space-y-2.5">
                   {visibleComments.map(c => {
                     const cu = getUserById(c.userId)
@@ -601,17 +600,16 @@ export default function FeedPage() {
                     )
                   })}
 
-                  {hasMore && (
-                    <button
-                      onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: !isExpanded }))}
-                      className="flex items-center gap-1 text-xs text-purple hover:text-pink transition-colors py-1">
-                      {isExpanded ? <><ChevronUp size={13} /> הסתר תגובות</> : <><ChevronDown size={13} /> ראה עוד {allComments.length - 2} תגובות</>}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: false }))}
+                    className="flex items-center gap-1 text-xs text-purple hover:text-pink transition-colors py-1">
+                    <ChevronUp size={13} /> הסתר תגובות
+                  </button>
                 </div>
               )}
 
-              {/* Comment input */}
+              {/* Comment input — only when expanded */}
+              {isOpen && (
               <div className="border-t border-border/40 bg-bg2/20 px-4 py-3 flex items-center gap-2">
                 <Avatar user={user} size="sm" />
                 <input
@@ -626,6 +624,7 @@ export default function FeedPage() {
                   <Send size={13} className="text-purple" />
                 </button>
               </div>
+              )}
             </div>
           )
         })}
