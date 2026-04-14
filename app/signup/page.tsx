@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { signUp } from '@/lib/db'
+import { signUp, signInWithOAuth } from '@/lib/db'
 import { Music2 } from 'lucide-react'
 
 const ROLES = ['זמר/ת', 'מפיק/ה', 'כותב/ת', 'נגן/ת', 'מיקס', 'עורך וידאו', 'שיווק']
@@ -52,6 +52,12 @@ export default function SignupPage() {
     router.push('/feed')
   }
 
+  const oauthSignup = async (provider: 'google' | 'facebook' | 'apple') => {
+    if (!HAS_SUPABASE) { quickSignup('u1'); return }
+    const { error } = await signInWithOAuth(provider)
+    if (error) showToast(error.message || 'שגיאה בהרשמה', 'error')
+  }
+
   return (
     <div className="min-h-screen bg-bg0 flex items-center justify-center p-4">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -77,13 +83,13 @@ export default function SignupPage() {
           {/* Social signup */}
           <div className="space-y-3 mb-6">
             {[
-              { label: 'הירשם עם Google', bg: 'bg-white', text: 'text-gray-800', icon: '🇬' },
-              { label: 'הירשם עם Facebook', bg: 'bg-[#1877F2]', text: 'text-white', icon: 'f' },
-              { label: 'הירשם עם Apple', bg: 'bg-black border border-border', text: 'text-white', icon: '🍎' },
+              { label: 'הירשם עם Google',   bg: 'bg-white',                      text: 'text-gray-800', icon: 'G', provider: 'google'   as const },
+              { label: 'הירשם עם Facebook', bg: 'bg-[#1877F2]',                  text: 'text-white',    icon: 'f', provider: 'facebook' as const },
+              { label: 'הירשם עם Apple',    bg: 'bg-black border border-border', text: 'text-white',    icon: '🍎',provider: 'apple'    as const },
             ].map((p) => (
-              <button key={p.label} onClick={() => quickSignup('u1')}
+              <button type="button" key={p.provider} onClick={() => oauthSignup(p.provider)}
                 className={`w-full flex items-center justify-center gap-3 py-3 rounded-xl ${p.bg} ${p.text} text-sm font-medium hover:opacity-90 transition-opacity`}>
-                <span className="text-base">{p.icon}</span>
+                <span className="text-base font-bold">{p.icon}</span>
                 {p.label}
               </button>
             ))}

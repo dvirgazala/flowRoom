@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS } from '@/lib/data'
-import { signIn } from '@/lib/db'
+import { signIn, signInWithOAuth } from '@/lib/db'
 import { Music2, Eye, EyeOff } from 'lucide-react'
 
 const HAS_SUPABASE = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -49,6 +49,13 @@ export default function LoginPage() {
   const mockLogin = (userId: string) => {
     login(userId)
     router.push('/feed')
+  }
+
+  const oauthLogin = async (provider: 'google' | 'facebook' | 'apple') => {
+    if (!HAS_SUPABASE) { mockLogin('u1'); return }
+    const { error } = await signInWithOAuth(provider)
+    if (error) showToast(error.message || 'שגיאה בהתחברות', 'error')
+    // On success, Supabase redirects → /feed via redirectTo
   }
 
   return (
@@ -118,11 +125,11 @@ export default function LoginPage() {
 
           <div className="flex justify-center gap-4 mb-6">
             {[
-              { icon: 'G', bg: 'bg-white', text: 'text-gray-700', label: 'Google', font: 'font-bold text-base' },
-              { icon: 'f', bg: 'bg-[#1877F2]', text: 'text-white', label: 'Facebook', font: 'font-bold text-lg' },
-              { icon: '🍎', bg: 'bg-black border border-border', text: 'text-white', label: 'Apple', font: 'text-lg' },
+              { icon: 'G', bg: 'bg-white',                         text: 'text-gray-700', provider: 'google'   as const, font: 'font-bold text-base' },
+              { icon: 'f', bg: 'bg-[#1877F2]',                     text: 'text-white',    provider: 'facebook' as const, font: 'font-bold text-lg' },
+              { icon: '🍎',bg: 'bg-black border border-border',    text: 'text-white',    provider: 'apple'    as const, font: 'text-lg' },
             ].map(p => (
-              <button type="button" key={p.label} onClick={() => mockLogin('u1')}
+              <button type="button" key={p.provider} onClick={() => oauthLogin(p.provider)}
                 className={`w-12 h-12 rounded-xl ${p.bg} ${p.text} ${p.font} flex items-center justify-center hover:opacity-85 active:scale-95 transition-all shadow-sm`}>
                 {p.icon}
               </button>

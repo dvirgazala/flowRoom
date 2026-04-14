@@ -34,6 +34,11 @@ export async function signIn(email: string, password: string) {
   return supabase.auth.signInWithPassword({ email, password })
 }
 
+export async function signInWithOAuth(provider: 'google' | 'facebook' | 'apple' | 'github') {
+  const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/feed` : undefined
+  return supabase.auth.signInWithOAuth({ provider, options: { redirectTo } })
+}
+
 export async function signOut() {
   return supabase.auth.signOut()
 }
