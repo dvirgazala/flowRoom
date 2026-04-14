@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: flowroom
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        value: https://jukwewqgjipughiuxlck.supabase.co
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1a3dld3FnamlwdWdoaXV4bGNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMjM5NzYsImV4cCI6MjA5MTY5OTk3Nn0.PdRMJM780fYwsFC3fODgic4CoM_1rgmh1gHEltsPSjA
+      - key: NODE_VERSION
+        value: "20"
