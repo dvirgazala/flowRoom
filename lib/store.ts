@@ -9,7 +9,7 @@ interface AppState {
   _hasHydrated: boolean
   _setHasHydrated: () => void
 
-  // Auth
+  // Auth — populated either from Supabase session or mock login
   currentUser: User | null
   login: (userId: string) => void
   logout: () => void

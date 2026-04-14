@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
+import { signOut } from '@/lib/db'
 import Avatar from './Avatar'
 import { Home, Music2, Search, ShoppingBag, LogOut, Bell, Plus, Settings, Briefcase } from 'lucide-react'
 import { useState } from 'react'
@@ -23,7 +24,8 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut().catch(() => {})
     logout()
     router.push('/login')
     showToast('התנתקת בהצלחה', 'info')

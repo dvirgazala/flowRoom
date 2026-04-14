@@ -4,7 +4,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS } from '@/lib/data'
+import { signIn } from '@/lib/db'
 import { Music2, Eye, EyeOff } from 'lucide-react'
+
+const HAS_SUPABASE = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 export default function LoginPage() {
   const router    = useRouter()
@@ -16,14 +19,30 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false)
   const [loading,  setLoading]  = useState(false)
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLoading(true)
+
+    if (HAS_SUPABASE) {
+      const { error } = await signIn(email, password)
+      if (error) {
+        showToast(error.message || 'אימייל או סיסמה שגויים', 'error')
+        setLoading(false)
+        return
+      }
+      // SupabaseProvider syncs profile → store.currentUser on auth change
+      router.push('/feed')
+      return
+    }
+
+    // Demo fallback when Supabase isn't configured
     const user = USERS.find(u => u.email === email)
     if (user) {
       login(user.id)
       router.push('/feed')
     } else {
       showToast('אימייל או סיסמה שגויים', 'error')
+      setLoading(false)
     }
   }
 

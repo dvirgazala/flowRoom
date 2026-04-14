@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm run:*)",
       "Bash(ipconfig)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

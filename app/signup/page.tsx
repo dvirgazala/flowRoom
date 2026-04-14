@@ -1,32 +1,55 @@
 'use client'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
+import { signUp } from '@/lib/db'
 import { Music2 } from 'lucide-react'
 
 const ROLES = ['זמר/ת', 'מפיק/ה', 'כותב/ת', 'נגן/ת', 'מיקס', 'עורך וידאו', 'שיווק']
+const HAS_SUPABASE = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 export default function SignupPage() {
-  const login = useStore(s => s.login)
+  const router    = useRouter()
+  const login     = useStore(s => s.login)
   const showToast = useStore(s => s.showToast)
+  const [firstName, setFirstName] = useState('')
+  const [lastName,  setLastName]  = useState('')
+  const [email,     setEmail]     = useState('')
+  const [password,  setPassword]  = useState('')
   const [role, setRole] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
+    if (HAS_SUPABASE) {
+      const displayName = `${firstName} ${lastName}`.trim()
+      const username = (firstName + lastName).toLowerCase().replace(/[^a-z0-9]/g, '') || email.split('@')[0]
+      const { error } = await signUp({ email, password, username, displayName, role })
+      if (error) {
+        showToast(error.message || 'שגיאה בהרשמה', 'error')
+        setLoading(false)
+        return
+      }
+      showToast('ברוך הבא ל-FlowRoom! אמת את המייל שלך.', 'success')
+      router.push('/feed')
+      return
+    }
+
+    // Demo fallback
     setTimeout(() => {
-      // Mock signup — log in as u1 for demo
       login('u1')
       showToast('ברוך הבא ל-FlowRoom!', 'success')
-      window.location.href = '/feed'
-    }, 1000)
+      router.push('/feed')
+    }, 600)
   }
 
   const quickSignup = (userId: string) => {
     login(userId)
     showToast('ברוך הבא ל-FlowRoom!', 'success')
-    window.location.href = '/feed'
+    router.push('/feed')
   }
 
   return (
@@ -76,20 +99,24 @@ export default function SignupPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">שם פרטי</label>
-                <input required placeholder="אבי" className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors" />
+                <input value={firstName} onChange={e => setFirstName(e.target.value)}
+                  required placeholder="אבי" className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">שם משפחה</label>
-                <input required placeholder="כהן" className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors" />
+                <input value={lastName} onChange={e => setLastName(e.target.value)}
+                  required placeholder="כהן" className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors" />
               </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">אימייל</label>
-              <input required type="email" placeholder="you@example.com" className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors" />
+              <input value={email} onChange={e => setEmail(e.target.value)}
+                required type="email" placeholder="you@example.com" className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors" />
             </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">סיסמה</label>
-              <input required type="password" placeholder="מינימום 8 תווים" className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors" />
+              <input value={password} onChange={e => setPassword(e.target.value)}
+                required type="password" minLength={6} placeholder="מינימום 6 תווים" className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors" />
             </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-2">אני יוצר/ת —</label>
