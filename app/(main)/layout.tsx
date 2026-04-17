@@ -15,7 +15,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </div>
         <div className="relative z-10">
           <Navbar />
-          <main className="pt-16 pb-16 md:pb-0">{children}</main>
+          <main className="pt-16 pb-mobile-nav md:pb-0">{children}</main>
         </div>
         <BottomNav />
         <Toast />

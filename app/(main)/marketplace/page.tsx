@@ -6,7 +6,7 @@ import { PRODUCTS, getUserById } from '@/lib/data'
 import Avatar from '@/components/Avatar'
 import AudioPlayer from '@/components/AudioPlayer'
 import PaymentModal from '@/components/PaymentModal'
-import { ShoppingBag, Star, Search, Crown, Zap, Filter, Music2, Mic2, FileText, BookOpen, Wand2, Megaphone } from 'lucide-react'
+import { ShoppingBag, Star, Search, Crown, Zap, SlidersHorizontal, Music2, FileText, BookOpen, Wand2, Megaphone } from 'lucide-react'
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   'ביט': <Music2 size={14} />,
@@ -26,6 +26,7 @@ export default function MarketplacePage() {
   const [typeFilter, setTypeFilter] = useState('הכל')
   const [sortBy, setSortBy] = useState<'popular' | 'price-low' | 'price-high' | 'rating'>('popular')
   const [payProduct, setPayProduct] = useState<{ title: string; price: number } | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
 
   const filtered = useMemo(() => {
     let list = PRODUCTS
@@ -117,18 +118,32 @@ export default function MarketplacePage() {
             <option value="price-high">מחיר: גבוה לנמוך</option>
             <option value="rating">דירוג</option>
           </select>
+          <button onClick={() => setShowFilters(p => !p)}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-all
+              ${showFilters || typeFilter !== 'הכל'
+                ? 'bg-purple/15 border-purple/40 text-purple'
+                : 'bg-bg3 border-border text-text-secondary hover:text-text-primary hover:border-purple/40'}`}>
+            <SlidersHorizontal size={15} />
+            קטגוריות
+            {typeFilter !== 'הכל' && <span className="text-[10px] bg-purple/25 rounded-full px-1.5">{typeFilter}</span>}
+          </button>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {TYPES.map(t => (
-            <button key={t} onClick={() => setTypeFilter(t)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
-                ${typeFilter === t ? 'bg-purple/20 border-purple text-purple' : 'bg-bg3 border-border text-text-secondary hover:border-purple/50'}`}>
-              {t !== 'הכל' && TYPE_ICONS[t]}
-              {t}
-            </button>
-          ))}
-        </div>
+        {showFilters && (
+          <div className="pt-3 border-t border-border">
+            <p className="text-xs text-text-muted mb-2">סוג</p>
+            <div className="flex flex-wrap gap-2">
+              {TYPES.map(t => (
+                <button key={t} onClick={() => setTypeFilter(t)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                    ${typeFilter === t ? 'bg-purple/20 border-purple text-purple' : 'bg-bg3 border-border text-text-secondary hover:border-purple/50'}`}>
+                  {t !== 'הכל' && TYPE_ICONS[t]}
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Products grid */}

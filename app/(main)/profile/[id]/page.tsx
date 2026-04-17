@@ -20,12 +20,25 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
   const user = getUserById(id) || USERS[0]
   const [activeTab, setActiveTab] = useState<'portfolio' | 'media' | 'collabs' | 'about'>('portfolio')
   const [dmOpen, setDmOpen] = useState(false)
+  const tabsRef = useRef<HTMLDivElement>(null)
 
   // Media state
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(user.media ?? [])
   const [lightbox, setLightbox] = useState<{ item: MediaItem; index: number } | null>(null)
   const [showUpload, setShowUpload] = useState(false)
   const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video' | 'reel'>('all')
+
+  const handleTabChange = (tab: typeof activeTab) => {
+    setActiveTab(tab)
+    // Keep scroll anchored to the tabs row instead of letting the browser snap
+    // when content height changes drastically between tabs.
+    requestAnimationFrame(() => {
+      const el = tabsRef.current
+      if (!el) return
+      const top = el.getBoundingClientRect().top + window.scrollY - 72
+      window.scrollTo({ top, behavior: 'auto' })
+    })
+  }
 
   const isMe = currentUser?.id === user.id
 
@@ -177,14 +190,14 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-bg1 rounded-2xl shadow-surface p-1 mb-6 overflow-x-auto">
+      <div ref={tabsRef} className="flex gap-1 bg-bg1 rounded-2xl shadow-surface p-1 mb-6 overflow-x-auto">
         {([
           ['portfolio', 'תיק עבודות'],
           ['media', `מדיה ${mediaItems.length > 0 ? `(${mediaItems.length})` : ''}`],
           ['collabs', 'שיתופי פעולה'],
           ['about', 'אודות'],
         ] as const).map(([tab, label]) => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
+          <button key={tab} onClick={() => handleTabChange(tab)}
             className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-medium transition-all whitespace-nowrap
               ${activeTab === tab ? 'bg-brand-gradient text-white shadow-glow-sm' : 'text-text-muted hover:text-text-secondary'}`}>
             {label}

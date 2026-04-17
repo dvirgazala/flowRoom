@@ -11,7 +11,7 @@ import {
   Briefcase, Search, Star, Clock, Plus, Zap,
   Mic2, Music2, Wand2, FileText, Headphones, Megaphone, BookOpen,
   X, Check, ChevronRight, Send, Loader2,
-  Shield, Users, TrendingUp,
+  Shield, Users, TrendingUp, SlidersHorizontal,
   ArrowRight, CheckCircle2,
 } from 'lucide-react'
 import type { User } from '@/lib/types'
@@ -156,6 +156,7 @@ export default function GigsPage() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('הכל')
   const [sort, setSort] = useState<Sort>('popular')
+  const [showFilters, setShowFilters] = useState(false)
 
   // dynamic data
   const [gigs, setGigs] = useState<Gig[]>(SEED_GIGS)
@@ -165,7 +166,7 @@ export default function GigsPage() {
   const [selectedGig, setSelectedGig] = useState<Gig | null>(null)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [dmUserId, setDmUserId] = useState<string | null>(null)
-  const [payGig, setPayGig] = useState<{ title: string; price: number } | null>(null)
+  const [payGig, setPayGig] = useState<{ title: string; price: number; source: Gig | null } | null>(null)
   const [showPostGig, setShowPostGig] = useState(false)
   const [showPostJob, setShowPostJob] = useState(false)
 
@@ -198,12 +199,12 @@ export default function GigsPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
 
       {/* Modals */}
-      {selectedGig && (
+      {selectedGig && !payGig && (
         <GigDetailModal
           gig={selectedGig}
           onClose={() => setSelectedGig(null)}
           onContact={(uid) => { setSelectedGig(null); setDmUserId(uid) }}
-          onOrder={(title, price) => { setSelectedGig(null); setPayGig({ title, price }) }}
+          onOrder={(title, price) => setPayGig({ title, price, source: selectedGig })}
         />
       )}
       {selectedJob && (
@@ -222,8 +223,13 @@ export default function GigsPage() {
         <PaymentModal
           productTitle={payGig.title}
           productPrice={payGig.price}
-          onClose={() => setPayGig(null)}
-          onSuccess={() => { setPayGig(null); showToast(`הזמנת "${payGig.title}" בוצעה בהצלחה! 🎉`, 'success') }}
+          onClose={() => { setPayGig(null); /* keeps selectedGig so details reopen */ }}
+          onSuccess={() => {
+            const title = payGig.title
+            setPayGig(null)
+            setSelectedGig(null)
+            showToast(`הזמנת "${title}" בוצעה בהצלחה! 🎉`, 'success')
+          }}
         />
       )}
       {showPostGig && (
@@ -261,7 +267,7 @@ export default function GigsPage() {
           </div>
           <button
             onClick={() => mode === 'gigs' ? setShowPostGig(true) : setShowPostJob(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 transition-opacity shadow-glow-sm active:scale-95"
+            className="flex items-center justify-center gap-2 min-w-[140px] px-4 py-2.5 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 transition-opacity shadow-glow-sm active:scale-95"
           >
             <Plus size={15} />
             {mode === 'gigs' ? 'פרסם גיג' : 'פרסם עבודה'}
@@ -315,17 +321,31 @@ export default function GigsPage() {
               <option value="price-high">מחיר: גבוה לנמוך</option>
             </select>
           )}
+          <button onClick={() => setShowFilters(p => !p)}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-all
+              ${showFilters || category !== 'הכל'
+                ? 'bg-purple/15 border-purple/40 text-purple'
+                : 'bg-bg3 border-border text-text-secondary hover:text-text-primary hover:border-purple/40'}`}>
+            <SlidersHorizontal size={15} />
+            קטגוריות
+            {category !== 'הכל' && <span className="text-[10px] bg-purple/25 rounded-full px-1.5">{category}</span>}
+          </button>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {CATEGORIES.map(cat => (
-            <button key={cat} onClick={() => setCategory(cat)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
-                ${category === cat ? 'bg-purple/20 border-purple text-purple' : 'bg-bg3 border-border text-text-secondary hover:border-purple/50'}`}>
-              {cat !== 'הכל' && CAT_ICONS[cat]}
-              {cat}
-            </button>
-          ))}
-        </div>
+        {showFilters && (
+          <div className="pt-3 border-t border-border">
+            <p className="text-xs text-text-muted mb-2">קטגוריה</p>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map(cat => (
+                <button key={cat} onClick={() => setCategory(cat)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                    ${category === cat ? 'bg-purple/20 border-purple text-purple' : 'bg-bg3 border-border text-text-secondary hover:border-purple/50'}`}>
+                  {cat !== 'הכל' && CAT_ICONS[cat]}
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -485,6 +505,7 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
 }) {
   const user = USERS.find(u => u.id === gig.userId)
   const [pkg, setPkg] = useState<GigPackage>('basic')
+  const [showAllReviews, setShowAllReviews] = useState(false)
   if (!user) return null
 
   const pkgPrice  = pkg === 'basic' ? gig.price : pkg === 'standard' ? gig.priceStandard : gig.pricePremium
@@ -494,7 +515,13 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
     { name: 'דנה מ.', rating: 5, text: 'עבודה מדהימה! מקצועי, מדויק, ועומד בזמנים. ממליצה בחום.', time: 'לפני שבוע' },
     { name: 'עמית כ.', rating: 5, text: 'תוצאה מצוינת. הסאונד יצא בדיוק כמו שרציתי.', time: 'לפני חודש' },
     { name: 'לירון ש.', rating: 4, text: 'שירות טוב, תקשורת מהירה. אחזור שוב.', time: 'לפני חודשיים' },
+    { name: 'איתי ב.', rating: 5, text: 'מעולה! תיקונים מהירים וסבלנות לאורך כל הדרך.', time: 'לפני 3 חודשים' },
+    { name: 'נועה ל.', rating: 5, text: 'הבינה בדיוק את הווייב שחיפשתי. תוצר מושלם.', time: 'לפני 4 חודשים' },
+    { name: 'רון ק.', rating: 4, text: 'מקצועיות גבוהה, ערך כספי טוב.', time: 'לפני 5 חודשים' },
+    { name: 'שיר ד.', rating: 5, text: 'זו הפעם השנייה שאני עובד איתו. שווה כל שקל.', time: 'לפני 6 חודשים' },
+    { name: 'מיה ג.', rating: 5, text: 'הזמנתי שוב ישירות אחרי השיר הקודם — תוצאה נהדרת.', time: 'לפני 7 חודשים' },
   ]
+  const visibleReviews = showAllReviews ? MOCK_REVIEWS : MOCK_REVIEWS.slice(0, 3)
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[300] flex items-start justify-center p-4 overflow-y-auto modal-backdrop" onClick={onClose}>
@@ -513,8 +540,8 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
         </div>
 
         <div className="flex flex-col lg:flex-row gap-0">
-          {/* Left: content */}
-          <div className="flex-1 p-6 overflow-y-auto" style={{ maxHeight: '75vh' }}>
+          {/* Left: content — outer backdrop handles scroll so the whole modal is readable */}
+          <div className="flex-1 p-6">
 
             {/* Title */}
             <h2 className="text-xl font-bold mb-4 leading-snug">{gig.title}</h2>
@@ -584,7 +611,7 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
                 </span>
               </h3>
               <div className="space-y-3">
-                {MOCK_REVIEWS.map((r, i) => (
+                {visibleReviews.map((r, i) => (
                   <div key={i} className="p-4 bg-bg2 rounded-xl">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -600,6 +627,14 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
                   </div>
                 ))}
               </div>
+              {MOCK_REVIEWS.length > 3 && (
+                <button
+                  onClick={() => setShowAllReviews(v => !v)}
+                  className="mt-3 w-full py-2.5 bg-bg3 border border-border hover:border-purple/40 hover:text-purple rounded-xl text-xs font-medium text-text-secondary transition-all"
+                >
+                  {showAllReviews ? 'הצג פחות' : `הצג את כל ${MOCK_REVIEWS.length} הביקורות`}
+                </button>
+              )}
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS, getUserById } from '@/lib/data'
@@ -10,7 +10,7 @@ import ProfileHoverCard from '@/components/ProfileHoverCard'
 import {
   Heart, MessageCircle, Share2, Send, Zap, Users as UsersIcon,
   Paperclip, Hash, X, Image, Music, Smile, MapPin, Globe, Lock, Users2,
-  ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, AtSign, Plus,
+  ThumbsUp, ThumbsDown, ChevronUp, AtSign, Plus, MoreHorizontal, Edit2, Trash2,
 } from 'lucide-react'
 
 // ─── Hashtag pool ────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ const PRIVACY_OPTIONS = [
 ]
 
 export default function FeedPage() {
-  const { currentUser, posts, likePost, addComment, likeComment, dislikeComment, addPost, showToast } = useStore()
+  const { currentUser, posts, likePost, addComment, likeComment, dislikeComment, addPost, updatePost, deletePost, showToast } = useStore()
   const user = currentUser || USERS[0]
 
   // Compose state
@@ -93,6 +93,25 @@ export default function FeedPage() {
   // Comment state per post
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({})
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
+
+  // Post menu + edit
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [editPostId, setEditPostId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!openMenuId) return
+    const close = () => setOpenMenuId(null)
+    document.addEventListener('mousedown', close)
+    document.addEventListener('touchstart', close)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('touchstart', close)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [openMenuId])
 
   // Apply modal
   const [applyPostId, setApplyPostId] = useState<string | null>(null)
@@ -196,16 +215,12 @@ export default function FeedPage() {
             className="w-full bg-bg3 rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:ring-1 focus:ring-purple border border-border focus:border-purple transition-all"
           />
           {showHashtags && contextHashtags.length > 0 && (
-            <div className="absolute top-full mt-1 right-0 left-0 z-[150] rounded-xl overflow-hidden"
-              style={{ background: '#0d0d22', border: '1px solid rgba(168,85,247,0.35)', boxShadow: '0 8px 32px rgba(0,0,0,0.7)' }}>
+            <div className="absolute top-full mt-1 right-0 left-0 z-[150] rounded-xl overflow-hidden bg-bg1 border border-purple/35 shadow-surface-lg">
               <p className="text-xs text-text-muted px-3 pt-2.5 pb-1">תגיות מומלצות</p>
               <div className="flex flex-wrap gap-1.5 px-3 pb-3 max-h-32 overflow-y-auto">
                 {contextHashtags.map(tag => (
                   <button key={tag} onClick={() => insertHashtag(tag)}
-                    className="px-2.5 py-1 text-purple rounded-lg text-xs hover:text-white active:scale-95 transition-all"
-                    style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(168,85,247,0.35)' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(168,85,247,0.15)' }}>
+                    className="px-2.5 py-1 bg-purple/15 hover:bg-purple/35 border border-purple/30 text-purple rounded-lg text-xs active:scale-95 transition-all">
                     {tag}
                   </button>
                 ))}
@@ -213,8 +228,7 @@ export default function FeedPage() {
             </div>
           )}
           {showMentions && filteredMentions.length > 0 && (
-            <div className="absolute top-full mt-1 right-0 left-0 z-[150] rounded-xl overflow-hidden"
-              style={{ background: '#0d0d22', border: '1px solid rgba(168,85,247,0.35)', boxShadow: '0 8px 32px rgba(0,0,0,0.7)' }}>
+            <div className="absolute top-full mt-1 right-0 left-0 z-[150] rounded-xl overflow-hidden bg-bg1 border border-purple/35 shadow-surface-lg">
               <p className="text-xs text-text-muted px-3 pt-2.5 pb-1">תיוג משתמש</p>
               <div className="max-h-48 overflow-y-auto">
                 {filteredMentions.map(u => (
@@ -324,6 +338,29 @@ export default function FeedPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-6 flex gap-6">
+
+      {/* Delete confirmation */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 modal-backdrop"
+          onClick={() => setConfirmDeleteId(null)}>
+          <div className="bg-bg1 rounded-2xl p-6 w-full max-w-sm shadow-surface-lg modal-card"
+            onClick={e => e.stopPropagation()}>
+            <h2 className="font-bold text-lg mb-1">למחוק את הפוסט?</h2>
+            <p className="text-text-muted text-sm mb-5">לא ניתן לשחזר פוסט לאחר המחיקה.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDeleteId(null)}
+                className="flex-1 py-2.5 bg-bg3 border border-border rounded-xl text-sm text-text-secondary hover:text-text-primary transition-all">
+                ביטול
+              </button>
+              <button
+                onClick={() => { if (confirmDeleteId) deletePost(confirmDeleteId); setConfirmDeleteId(null) }}
+                className="flex-1 py-2.5 bg-danger/90 hover:bg-danger rounded-xl text-sm font-semibold text-white active:scale-95 transition-all flex items-center justify-center gap-2">
+                <Trash2 size={13} /> מחק
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Apply modal */}
       {applyPostId && (
@@ -505,18 +542,71 @@ export default function FeedPage() {
                       🤝 מחפש שיתוף
                     </span>
                   )}
+                  {post.userId === user.id && (
+                    <div className="relative flex-shrink-0" onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)}
+                        className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg3 transition-colors"
+                        aria-label="אפשרויות"
+                      >
+                        <MoreHorizontal size={17} />
+                      </button>
+                      {openMenuId === post.id && (
+                        <div className="absolute left-0 top-9 w-40 bg-bg2 border border-border rounded-xl overflow-hidden z-[80] fade-in shadow-surface-lg">
+                          <button
+                            onClick={() => { setEditPostId(post.id); setEditText(post.content); setOpenMenuId(null) }}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg3 transition-colors text-right"
+                          >
+                            <Edit2 size={13} /> ערוך פוסט
+                          </button>
+                          <button
+                            onClick={() => { setConfirmDeleteId(post.id); setOpenMenuId(null) }}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-danger hover:bg-danger/10 transition-colors text-right border-t border-border"
+                          >
+                            <Trash2 size={13} /> מחק פוסט
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Content */}
-                <p className="text-sm text-text-primary leading-relaxed mb-3 whitespace-pre-line">
-                  {post.content.split(/(\s+)/).map((word, i) =>
-                    word.startsWith('#')
-                      ? <span key={i} className="text-purple hover:text-pink cursor-pointer transition-colors">{word}</span>
-                      : word.startsWith('@')
-                        ? <span key={i} className="text-info cursor-pointer hover:underline">{word}</span>
-                        : <span key={i}>{word}</span>
-                  )}
-                </p>
+                {editPostId === post.id ? (
+                  <div className="mb-3">
+                    <textarea
+                      value={editText}
+                      onChange={e => setEditText(e.target.value)}
+                      rows={4}
+                      className="w-full bg-bg3 border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors resize-none"
+                    />
+                    <div className="flex items-center justify-end gap-2 mt-2">
+                      <button
+                        onClick={() => { setEditPostId(null); setEditText('') }}
+                        className="px-3 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-bg3 transition-colors"
+                      >ביטול</button>
+                      <button
+                        onClick={() => {
+                          if (!editText.trim()) return
+                          updatePost(post.id, editText.trim())
+                          setEditPostId(null); setEditText('')
+                        }}
+                        disabled={!editText.trim() || editText.trim() === post.content}
+                        className="px-3 py-1.5 bg-brand-gradient rounded-lg text-xs font-semibold text-white hover:opacity-90 active:scale-95 disabled:opacity-40 transition-all"
+                      >שמור</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-text-primary leading-relaxed mb-3 whitespace-pre-line">
+                    {post.content.split(/(\s+)/).map((word, i) =>
+                      word.startsWith('#')
+                        ? <span key={i} className="text-purple hover:text-pink cursor-pointer transition-colors">{word}</span>
+                        : word.startsWith('@')
+                          ? <span key={i} className="text-info cursor-pointer hover:underline">{word}</span>
+                          : <span key={i}>{word}</span>
+                    )}
+                  </p>
+                )}
 
                 {/* Audio */}
                 {post.audioUrl && (

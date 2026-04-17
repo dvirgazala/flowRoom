@@ -49,12 +49,20 @@ html[data-theme="dark"] {
 * { box-sizing: border-box; }
 html { direction: rtl; }
 
-/* Prevent iOS Safari auto-zoom on input focus (inputs < 16px trigger zoom) */
-input, textarea, select {
-  font-size: 16px;
+/* Prevent iOS Safari auto-zoom on input focus (inputs < 16px trigger zoom).
+   !important is required to win over Tailwind utilities like .text-xs applied to inputs. */
+@media (max-width: 639px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
 }
-@media (min-width: 640px) {
-  input, textarea, select { font-size: inherit; }
+
+/* Mobile content area needs room for fixed bottom nav (64px) + iOS home indicator. */
+.pb-mobile-nav {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom) + 0.75rem);
+}
+@media (min-width: 768px) {
+  .pb-mobile-nav { padding-bottom: 0; }
 }
 
 body {
@@ -225,7 +233,30 @@ html[data-theme="light"] .bg-bg2[style] { background-color: #ffffff !important; 
 html[data-theme="light"] ::-webkit-scrollbar-track { background: #f4f4fc; }
 html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #c0c0dc; }
 
-/* Smooth theme transition on all elements */
-html[data-theme="light"] *, html[data-theme="dark"] * {
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease, box-shadow 0.2s ease;
+/* Print styles — Split Sheet & future contract exports must look professional
+   on white paper regardless of the app theme. */
+@media print {
+  html, body { background: #ffffff !important; color: #000000 !important; }
+  nav, .print\:hidden { display: none !important; }
+  .bg-bg0, .bg-bg1, .bg-bg2, .bg-bg3 { background: #ffffff !important; }
+  .text-text-primary, .text-text-secondary { color: #000 !important; }
+  .text-text-muted { color: #555 !important; }
+  .text-purple, .text-pink, .text-warning, .text-success { color: #000 !important; }
+  .border-border, [class*="border-border"] { border-color: #cccccc !important; }
+  .shadow-surface, .shadow-surface-lg, .shadow-glow, .shadow-glow-sm, .shadow-card { box-shadow: none !important; }
+  .bg-brand-gradient { background: #f5f5f5 !important; color: #000 !important; }
+  @page { margin: 1.5cm; }
+}
+
+/* Smooth theme transition: only while actively switching themes, and only on
+   elements that actually react to the theme token (body + cards/panels/nav).
+   A universal `*` transition freezes the browser on large pages and causes
+   a visible "darken flash" during route transitions. */
+html.theme-switching body,
+html.theme-switching .bg-bg0,
+html.theme-switching .bg-bg1,
+html.theme-switching .bg-bg2,
+html.theme-switching .bg-bg3,
+html.theme-switching nav.fixed {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
 }

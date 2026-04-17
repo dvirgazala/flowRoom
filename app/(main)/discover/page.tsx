@@ -66,45 +66,41 @@ export default function DiscoverPage() {
             <input
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="חפש לפי שם, תפקיד, סגנון..."
-              className="w-full bg-bg3 rounded-xl pr-10 pl-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-purple/50 transition-all"
-              style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+              className="w-full bg-bg3 border border-border rounded-xl pr-10 pl-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple focus:ring-1 focus:ring-purple/50 transition-all"
             />
           </div>
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value as typeof sortBy)}
-            className="bg-bg3 rounded-xl px-3 py-2 text-sm text-text-secondary focus:outline-none cursor-pointer"
-            style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+            className="bg-bg3 border border-border rounded-xl px-3 py-2 text-sm text-text-secondary focus:outline-none focus:border-purple cursor-pointer"
           >
             <option value="rating">דירוג</option>
             <option value="followers">עוקבים</option>
             <option value="trust">אמינות</option>
-            <option value="online">מחוברים</option>
+            <option value="online">אונליין עכשיו</option>
           </select>
           <button onClick={() => setShowFilters(p => !p)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-all`}
-            style={{
-              background: showFilters ? 'rgba(168,85,247,0.15)' : undefined,
-              border: showFilters ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.06)',
-              color: showFilters ? '#a855f7' : '#9b9eb0',
-              backgroundColor: showFilters ? undefined : '#1e1e3c',
-            }}>
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-all
+              ${showFilters
+                ? 'bg-purple/15 border-purple/40 text-purple'
+                : 'bg-bg3 border-border text-text-secondary hover:text-text-primary hover:border-purple/40'}`}>
             <SlidersHorizontal size={15} />
             פילטרים
           </button>
         </div>
 
         {showFilters && (
-          <div className="space-y-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="space-y-3 pt-3 border-t border-border">
             {/* Role filter */}
             <div>
               <p className="text-xs text-text-muted mb-2">תפקיד</p>
               <div className="flex flex-wrap gap-2">
                 {ROLE_FILTERS.map(r => (
                   <button key={r} onClick={() => setRoleFilter(r)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all
-                      ${roleFilter === r ? 'bg-purple/20 text-purple' : 'bg-bg3 text-text-secondary hover:text-text-primary'}`}
-                    style={{ border: roleFilter === r ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.05)' }}>
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                      ${roleFilter === r
+                        ? 'bg-purple/20 border-purple/40 text-purple'
+                        : 'bg-bg3 border-border text-text-secondary hover:text-text-primary'}`}>
                     {r}
                   </button>
                 ))}
@@ -116,9 +112,10 @@ export default function DiscoverPage() {
               <div className="flex flex-wrap gap-2">
                 {GENRE_FILTERS.map(g => (
                   <button key={g} onClick={() => setGenreFilter(g)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all
-                      ${genreFilter === g ? 'bg-pink/20 text-pink' : 'bg-bg3 text-text-secondary hover:text-text-primary'}`}
-                    style={{ border: genreFilter === g ? '1px solid rgba(236,72,153,0.4)' : '1px solid rgba(255,255,255,0.05)' }}>
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                      ${genreFilter === g
+                        ? 'bg-pink/20 border-pink/40 text-pink'
+                        : 'bg-bg3 border-border text-text-secondary hover:text-text-primary'}`}>
                     {g}
                   </button>
                 ))}
@@ -163,14 +160,13 @@ export default function DiscoverPage() {
             {u.genres.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {u.genres.slice(0, 3).map(g => (
-                  <span key={g} className="text-xs px-2 py-0.5 bg-purple/10 text-purple rounded-md"
-                    style={{ border: '1px solid rgba(168,85,247,0.2)' }}>{g}</span>
+                  <span key={g} className="text-xs px-2 py-0.5 bg-purple/10 border border-purple/20 text-purple rounded-md">{g}</span>
                 ))}
               </div>
             )}
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-2 text-center mb-4" style={{ paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="grid grid-cols-3 gap-2 text-center mb-4 pt-3 border-t border-border">
               <div>
                 <div className="flex items-center justify-center gap-0.5">
                   <Music2 size={11} className="text-purple" />
@@ -202,8 +198,7 @@ export default function DiscoverPage() {
                 שתף פעולה
               </button>
               <Link href={`/profile/${u.id}`}
-                className="flex-1 py-2 rounded-xl text-xs text-center text-text-secondary hover:text-text-primary transition-colors flex items-center justify-center gap-1.5"
-                style={{ border: '1px solid rgba(255,255,255,0.07)', background: '#1e1e3c' }}>
+                className="flex-1 py-2 rounded-xl text-xs text-center text-text-secondary hover:text-text-primary hover:border-purple/40 transition-colors flex items-center justify-center gap-1.5 bg-bg3 border border-border">
                 <Users size={11} />
                 פרופיל
               </Link>

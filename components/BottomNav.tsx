@@ -1,11 +1,12 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Music2, Search, ShoppingBag, Briefcase } from 'lucide-react'
+import { Home, Music2, Search, ShoppingBag, Briefcase, ShieldCheck } from 'lucide-react'
 
 const NAV = [
   { href: '/feed',        label: 'פיד',     icon: Home },
   { href: '/rooms',       label: 'חדרים',   icon: Music2 },
+  { href: '/rights',      label: 'זכויות',  icon: ShieldCheck },
   { href: '/discover',    label: 'גלה',     icon: Search },
   { href: '/marketplace', label: 'שוק',     icon: ShoppingBag },
   { href: '/gigs',        label: 'גיגים',   icon: Briefcase },
@@ -30,11 +31,11 @@ export default function BottomNav() {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 transition-all active:scale-90
+              className={`flex flex-col items-center gap-0.5 px-1.5 py-2 transition-all active:scale-90 flex-1 min-w-0
                 ${active ? 'text-purple' : 'text-text-muted'}`}
             >
               <div className={`p-1.5 rounded-xl transition-all ${active ? 'bg-purple/15' : ''}`}>
-                <Icon size={21} strokeWidth={active ? 2.5 : 1.8} />
+                <Icon size={19} strokeWidth={active ? 2.5 : 1.8} />
               </div>
               <span className="text-[10px] font-medium leading-none">{label}</span>
             </Link>

@@ -2,14 +2,18 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
+import { USERS } from '@/lib/data'
 import { signOut } from '@/lib/db'
 import Avatar from './Avatar'
-import { Home, Music2, Search, ShoppingBag, LogOut, Bell, Plus, Settings, Briefcase } from 'lucide-react'
+import DmChatModal from './DmChatModal'
+import VerifiedBadge from './VerifiedBadge'
+import { Home, Music2, Search, ShoppingBag, LogOut, Bell, Plus, Settings, Briefcase, MessageCircle, ShieldCheck, Wallet } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 
 const NAV = [
   { href: '/feed',        label: 'פיד',     icon: Home },
   { href: '/rooms',       label: 'חדרים',   icon: Music2 },
+  { href: '/rights',      label: 'זכויות',  icon: ShieldCheck },
   { href: '/discover',    label: 'גלה',     icon: Search },
   { href: '/marketplace', label: 'שוק',     icon: ShoppingBag },
   { href: '/gigs',        label: 'גיגים',   icon: Briefcase },
@@ -23,15 +27,19 @@ export default function Navbar() {
   const showToast = useStore(s => s.showToast)
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [chatListOpen, setChatListOpen] = useState(false)
+  const [chatUserId, setChatUserId] = useState<string | null>(null)
+  const [chatSearch, setChatSearch] = useState('')
   const notifRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const chatRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!menuOpen && !notifOpen) return
-    const closeAll = () => { setMenuOpen(false); setNotifOpen(false) }
+    if (!menuOpen && !notifOpen && !chatListOpen) return
+    const closeAll = () => { setMenuOpen(false); setNotifOpen(false); setChatListOpen(false) }
     const onClick = (e: Event) => {
       const t = e.target as Node
-      if (notifRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      if (notifRef.current?.contains(t) || menuRef.current?.contains(t) || chatRef.current?.contains(t)) return
       closeAll()
     }
     document.addEventListener('mousedown', onClick)
@@ -42,7 +50,7 @@ export default function Navbar() {
       document.removeEventListener('touchstart', onClick)
       window.removeEventListener('scroll', closeAll, true)
     }
-  }, [menuOpen, notifOpen])
+  }, [menuOpen, notifOpen, chatListOpen])
 
   const handleLogout = async () => {
     await signOut().catch(() => {})
@@ -84,9 +92,58 @@ export default function Navbar() {
           חדר חדש
         </Link>
 
+        {/* Messages */}
+        {currentUser && (
+          <div className="relative" ref={chatRef}>
+            <button onClick={() => { setChatListOpen(!chatListOpen); setNotifOpen(false); setMenuOpen(false) }}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-bg3 hover:bg-bg2 transition-colors relative"
+              aria-label="הודעות">
+              <MessageCircle size={16} className="text-text-secondary" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple rounded-full" />
+            </button>
+            {chatListOpen && (
+              <div className="absolute left-0 top-12 w-80 max-w-[calc(100vw-2rem)] bg-bg2 rounded-xl overflow-hidden z-50 fade-in" style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 8px 40px rgba(0,0,0,0.8)' }}>
+                <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                  <p className="text-sm font-semibold">הודעות</p>
+                  <MessageCircle size={14} className="text-purple" />
+                </div>
+                <div className="px-3 pt-2 pb-1">
+                  <input
+                    value={chatSearch}
+                    onChange={e => setChatSearch(e.target.value)}
+                    placeholder="חפש משתמש..."
+                    className="w-full bg-bg3 border border-border rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple transition-colors"
+                  />
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {USERS
+                    .filter(u => u.id !== currentUser.id && (!chatSearch.trim() || u.name.includes(chatSearch.trim())))
+                    .slice(0, 20)
+                    .map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => { setChatUserId(u.id); setChatListOpen(false); setChatSearch('') }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-bg3 transition-colors text-right"
+                      >
+                        <Avatar user={u} size="sm" showOnline />
+                        <div className="flex-1 min-w-0 text-right">
+                          <div className="flex items-center gap-1">
+                            <p className="text-sm font-medium text-text-primary truncate">{u.name}</p>
+                            {u.isVerified && <VerifiedBadge size={11} />}
+                          </div>
+                          <p className="text-xs text-text-muted truncate">{u.role}</p>
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
-          <button onClick={() => { setNotifOpen(!notifOpen); setMenuOpen(false) }}
+          <button onClick={() => { setNotifOpen(!notifOpen); setMenuOpen(false); setChatListOpen(false) }}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-bg3 hover:bg-bg2 transition-colors relative">
             <Bell size={16} className="text-text-secondary" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink rounded-full" />
@@ -117,7 +174,7 @@ export default function Navbar() {
         {/* User menu / login */}
         {currentUser ? (
           <div className="relative" ref={menuRef}>
-            <button onClick={() => { setMenuOpen(!menuOpen); setNotifOpen(false) }}
+            <button onClick={() => { setMenuOpen(!menuOpen); setNotifOpen(false); setChatListOpen(false) }}
               className="flex items-center gap-2 p-1 rounded-full hover:ring-2 hover:ring-purple/40 transition-all">
               <Avatar user={currentUser} size="sm" showOnline />
             </button>
@@ -134,6 +191,10 @@ export default function Navbar() {
                 <Link href="/rooms" onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg3 transition-colors">
                   <span className="text-base">🎵</span> החדרים שלי
+                </Link>
+                <Link href="/earnings" onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg3 transition-colors">
+                  <Wallet size={15} /> תיבת הכנסות
                 </Link>
                 <Link href="/settings" onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg3 transition-colors">
@@ -156,6 +217,7 @@ export default function Navbar() {
           </Link>
         )}
       </div>
+      {chatUserId && <DmChatModal userId={chatUserId} onClose={() => setChatUserId(null)} />}
     </nav>
   )
 }

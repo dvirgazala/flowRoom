@@ -139,10 +139,11 @@ export default function RoomsPage() {
           {otherRooms.map(room => {
             const stage = STAGES[room.currentStage]
             return (
-              <div key={room.id} className="bg-bg1 rounded-2xl shadow-surface p-5">
+              <Link key={room.id} href={`/rooms/${room.id}`}
+                className="group bg-bg1 rounded-2xl shadow-surface p-5 transition-all duration-200 hover:shadow-glow-sm hover:-translate-y-0.5">
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <h3 className="font-semibold">{room.name}</h3>
+                    <h3 className="font-semibold group-hover:text-purple transition-colors">{room.name}</h3>
                     <p className="text-text-muted text-xs mt-0.5">{room.genre}</p>
                   </div>
                   <Globe size={14} className="text-text-muted mt-1" />
@@ -154,12 +155,12 @@ export default function RoomsPage() {
                     <span className="text-text-muted">·</span>
                     <span className="text-xs text-text-muted">{room.members.length} חברים</span>
                   </div>
-                  <button onClick={() => showToast('בקשת הצטרפות נשלחה!', 'success')}
+                  <button onClick={e => { e.preventDefault(); e.stopPropagation(); showToast('בקשת הצטרפות נשלחה!', 'success') }}
                     className="px-3 py-1.5 bg-brand-gradient rounded-lg text-xs font-semibold text-white hover:opacity-90 transition-opacity">
                     בקש להצטרף
                   </button>
                 </div>
-              </div>
+              </Link>
             )
           })}
         </div>
