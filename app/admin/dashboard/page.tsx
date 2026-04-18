@@ -101,11 +101,18 @@ export default function AdminDashboard() {
               <span className="text-sm font-semibold text-danger">Admin Dashboard</span>
             </div>
           </div>
-          <button onClick={handleLogout}
-            className="flex items-center gap-2 px-3 py-1.5 bg-bg3 border border-border rounded-xl text-xs text-text-secondary hover:text-text-primary transition-colors">
-            <LogOut size={14} />
-            התנתק
-          </button>
+          <div className="flex items-center gap-2">
+            <Link href="/admin/regulatory"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple/10 border border-purple/30 rounded-xl text-xs text-purple hover:bg-purple/20 transition-colors">
+              <ShieldAlert size={13} />
+              תוכן רגולטורי
+            </Link>
+            <button onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-1.5 bg-bg3 border border-border rounded-xl text-xs text-text-secondary hover:text-text-primary transition-colors">
+              <LogOut size={14} />
+              התנתק
+            </button>
+          </div>
         </div>
       </div>
 

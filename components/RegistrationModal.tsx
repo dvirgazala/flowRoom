@@ -4,9 +4,10 @@ import { useStore } from '@/lib/store'
 import { getUserById } from '@/lib/data'
 import type { RegistrationBody, SplitParticipant } from '@/lib/types'
 import { BODIES } from '@/app/(main)/rights/page'
+import { formatVerifiedDate, isStale } from '@/lib/regulatory'
 import {
   X, Copy, ExternalLink, CheckCircle2, Clock, AlertCircle, RotateCcw,
-  ShieldCheck, Info, ArrowUpRight,
+  ShieldCheck, Info, ArrowUpRight, RefreshCw,
 } from 'lucide-react'
 
 /* ── Body-specific pre-fill fields ─────────────────────────────────────── */
@@ -77,8 +78,8 @@ function buildFields(body: RegistrationBody, sheet: {
   }
 }
 
-export default function RegistrationModal({ sheetId, body, onClose }: {
-  sheetId: string; body: RegistrationBody; onClose: () => void
+export default function RegistrationModal({ sheetId, body, lastVerifiedAt, onClose }: {
+  sheetId: string; body: RegistrationBody; lastVerifiedAt?: string; onClose: () => void
 }) {
   const {
     splitSheets, markRegistrationSubmitted, markRegistrationRegistered,
@@ -271,6 +272,12 @@ export default function RegistrationModal({ sheetId, body, onClose }: {
           <p className="text-xs text-text-muted text-center mt-3">
             העתק את הנתונים, פתח את {meta.label} בלשונית חדשה, הדבק בטופס — ואז חזור לסמן שהוגש.
           </p>
+          {lastVerifiedAt && (
+            <div className={`flex items-center justify-center gap-1.5 mt-2 text-[11px] ${isStale(lastVerifiedAt) ? 'text-warning' : 'text-text-muted'}`}>
+              <RefreshCw size={10} />
+              {isStale(lastVerifiedAt) ? 'מידע זה לא אומת מעל 30 יום — בדוק מול האתר הרשמי' : `אומת: ${formatVerifiedDate(lastVerifiedAt)}`}
+            </div>
+          )}
         </div>
       </div>
     </div>

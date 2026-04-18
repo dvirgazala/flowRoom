@@ -1,81 +1,19 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { getUserById } from '@/lib/data'
 import type { RegistrationBody, RegistrationStatus, SplitSheet } from '@/lib/types'
+import { fetchBodiesMeta, BODIES_FALLBACK, isStale, formatVerifiedDate, type BodyMeta } from '@/lib/regulatory'
 import RegistrationModal from '@/components/RegistrationModal'
 import {
   ShieldCheck, CheckCircle2, AlertCircle, Clock, XCircle, ArrowUpRight,
-  Music2, FileText, Lock, Zap, TrendingUp, HelpCircle, Wallet,
+  Music2, FileText, Lock, Zap, TrendingUp, HelpCircle, Wallet, RefreshCw,
 } from 'lucide-react'
 
-/* ── Body metadata ────────────────────────────────────────────────────────
-   Single source of truth for every registration body — label, link, color,
-   and the plain-Hebrew explanation of what this body actually pays for.
-*/
-export const BODIES: Record<RegistrationBody, {
-  label: string
-  short: string
-  url: string
-  color: string
-  tint: string
-  ring: string
-  blurb: string
-  relevantSplit: 'publishing' | 'master' | 'both'
-}> = {
-  acum: {
-    label: 'אקו"ם',
-    short: 'ACUM',
-    url: 'https://www.acum.org.il/',
-    color: 'text-purple',
-    tint: 'bg-purple/10',
-    ring: 'border-purple/30',
-    blurb: 'תמלוגי ביצוע ציבורי ושכפול — למלחינים ופזמונאים. כל שיר שיוצא חייב להיות רשום.',
-    relevantSplit: 'publishing',
-  },
-  pil: {
-    label: 'הפיל',
-    short: 'PIL',
-    url: 'https://www.pil.org.il/',
-    color: 'text-pink',
-    tint: 'bg-pink/10',
-    ring: 'border-pink/30',
-    blurb: 'הפדרציה לתקליטים — מייצגת מפיקים ובעלי מאסטר מול רדיו, פלאיליסטים, אירועים.',
-    relevantSplit: 'master',
-  },
-  eshkolot: {
-    label: 'אשכולות',
-    short: 'Eshkolot',
-    url: 'https://eshkolot.com/',
-    color: 'text-warning',
-    tint: 'bg-warning/10',
-    ring: 'border-warning/30',
-    blurb: 'אמנים מבצעים — גובה זכויות שכנות (neighboring rights) לזמרים ולנגנים.',
-    relevantSplit: 'master',
-  },
-  distributor: {
-    label: 'דיסטריביוטור',
-    short: 'DistroKid',
-    url: 'https://distrokid.com/',
-    color: 'text-info',
-    tint: 'bg-info/10',
-    ring: 'border-info/30',
-    blurb: 'הפצה דיגיטלית לספוטיפיי, אפל מיוזיק, יוטיוב מיוזיק, טיקטוק — סטרימינג גלובלי.',
-    relevantSplit: 'both',
-  },
-  'youtube-cid': {
-    label: 'YouTube Content ID',
-    short: 'CID',
-    url: 'https://studio.youtube.com/',
-    color: 'text-danger',
-    tint: 'bg-danger/10',
-    ring: 'border-danger/30',
-    blurb: 'זיהוי אוטומטי של השיר שלך ביוטיוב — מייצר הכנסה כשאחרים משתמשים בשיר בוידאו.',
-    relevantSplit: 'master',
-  },
-}
-
+// BODIES is re-exported from the fallback so earnings/page.tsx and RegistrationModal keep working.
+// RightsPage component augments this with live DB data at runtime.
+export const BODIES = BODIES_FALLBACK
 export const BODY_ORDER: RegistrationBody[] = ['acum', 'pil', 'eshkolot', 'distributor', 'youtube-cid']
 
 const STATUS_META: Record<RegistrationStatus, { label: string; icon: typeof CheckCircle2; color: string; bg: string }> = {
@@ -87,7 +25,12 @@ const STATUS_META: Record<RegistrationStatus, { label: string; icon: typeof Chec
 
 export default function RightsPage() {
   const { splitSheets, currentUser } = useStore()
-  const [modal, setModal] = useState<{ sheetId: string; body: RegistrationBody } | null>(null)
+  const [modal, setModal] = useState<{ sheetId: string; body: RegistrationBody; lastVerifiedAt?: string } | null>(null)
+  const [bodies, setBodies] = useState<Record<RegistrationBody, BodyMeta>>(BODIES_FALLBACK)
+
+  useEffect(() => {
+    fetchBodiesMeta().then(setBodies)
+  }, [])
 
   // Scope to sheets where the current user is a participant in any category.
   const mySheets = useMemo(() => {
@@ -180,7 +123,8 @@ export default function RightsPage() {
       ) : (
         <div className="space-y-3">
           {mySheets.map(sheet => (
-            <TrackCard key={sheet.id} sheet={sheet} onOpenRegistration={(body) => setModal({ sheetId: sheet.id, body })} />
+            <TrackCard key={sheet.id} sheet={sheet} bodies={bodies}
+              onOpenRegistration={(body) => setModal({ sheetId: sheet.id, body, lastVerifiedAt: bodies[body]?.lastVerifiedAt })} />
           ))}
         </div>
       )}
@@ -199,6 +143,7 @@ export default function RightsPage() {
         <RegistrationModal
           sheetId={modal.sheetId}
           body={modal.body}
+          lastVerifiedAt={modal.lastVerifiedAt}
           onClose={() => setModal(null)}
         />
       )}
@@ -223,8 +168,9 @@ function StatCard({ label, value, icon: Icon, color, hint }: {
 }
 
 /* ── Track card — one per split sheet ─────────────────────────────────── */
-function TrackCard({ sheet, onOpenRegistration }: {
+function TrackCard({ sheet, bodies, onOpenRegistration }: {
   sheet: SplitSheet
+  bodies: Record<RegistrationBody, BodyMeta>
   onOpenRegistration: (body: RegistrationBody) => void
 }) {
   const regs = sheet.registrations ?? []
@@ -281,19 +227,23 @@ function TrackCard({ sheet, onOpenRegistration }: {
       {/* Body grid */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 px-5 pb-5">
         {BODY_ORDER.map(bodyKey => {
-          const body = BODIES[bodyKey]
+          const body = bodies[bodyKey] ?? BODIES[bodyKey]
           const reg = regs.find(r => r.body === bodyKey)
           const status = reg?.status ?? 'not_registered'
           const statusMeta = STATUS_META[status]
           const StatusIcon = statusMeta.icon
 
+          const stale = body.lastVerifiedAt ? isStale(body.lastVerifiedAt) : false
           return (
             <button key={bodyKey} onClick={() => onOpenRegistration(bodyKey)}
               className={`text-right p-3 rounded-xl border transition-all hover:border-purple/50 hover:bg-bg3
                 ${status === 'registered' ? 'border-success/30 bg-success/5' : 'border-border bg-bg1'}`}>
               <div className="flex items-center justify-between mb-1.5">
                 <span className={`text-xs font-semibold ${body.color}`}>{body.label}</span>
-                <StatusIcon size={13} className={statusMeta.color} />
+                <div className="flex items-center gap-1">
+                  {stale && <RefreshCw size={10} className="text-warning" aria-label="מידע לא עודכן מעל 30 יום" />}
+                  <StatusIcon size={13} className={statusMeta.color} />
+                </div>
               </div>
               <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded border ${statusMeta.bg} ${statusMeta.color}`}>
                 {statusMeta.label}
