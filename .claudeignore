@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+public/
+*.pem
+*.log
+.env
+.env.local
+.env*.local
+package-lock.json
