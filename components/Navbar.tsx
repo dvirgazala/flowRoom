@@ -3,12 +3,33 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { USERS } from '@/lib/data'
-import { signOut } from '@/lib/db'
+import { signOut, getMyNotifications, markAllNotificationsRead } from '@/lib/db'
+import type { NotificationWithFrom } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
+import { relativeTime } from '@/lib/profile-utils'
 import Avatar from './Avatar'
 import DmChatModal from './DmChatModal'
 import VerifiedBadge from './VerifiedBadge'
 import { Home, Music2, Search, ShoppingBag, LogOut, Bell, Plus, Settings, Briefcase, MessageCircle, ShieldCheck, Wallet } from 'lucide-react'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+
+const hasSupabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+const NOTIF_DOT: Record<string, string> = {
+  like: 'bg-pink', comment: 'bg-info', follow: 'bg-purple',
+  mention: 'bg-warning', room_invite: 'bg-purple', split_request: 'bg-warning',
+}
+
+function notifText(n: NotificationWithFrom): string {
+  const who = n.from_user?.display_name ?? 'מישהו'
+  if (n.type === 'like') return `${who} לייקה את הפוסט שלך`
+  if (n.type === 'comment') return `${who} הגיב על הפוסט שלך`
+  if (n.type === 'follow') return `${who} התחיל לעקוב אחריך`
+  if (n.type === 'mention') return `${who} הזכיר אותך`
+  if (n.type === 'room_invite') return `${who} הזמין אותך לחדר`
+  if (n.type === 'split_request') return `${who} שלח בקשת splits`
+  return n.message || 'התראה חדשה'
+}
 
 const NAV = [
   { href: '/feed',        label: 'פיד',     icon: Home },
@@ -30,9 +51,32 @@ export default function Navbar() {
   const [chatListOpen, setChatListOpen] = useState(false)
   const [chatUserId, setChatUserId] = useState<string | null>(null)
   const [chatSearch, setChatSearch] = useState('')
+  const [notifications, setNotifications] = useState<NotificationWithFrom[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const notifRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const chatRef = useRef<HTMLDivElement>(null)
+
+  const loadNotifications = useCallback(async () => {
+    if (!hasSupabase || !currentUser) return
+    const items = await getMyNotifications()
+    setNotifications(items)
+    setUnreadCount(items.filter(n => !n.read).length)
+  }, [currentUser])
+
+  useEffect(() => { loadNotifications() }, [loadNotifications])
+
+  // Realtime: new notifications
+  useEffect(() => {
+    if (!hasSupabase || !currentUser) return
+    const channel = supabase
+      .channel(`notifs:${currentUser.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUser.id}` }, () => {
+        loadNotifications()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [currentUser, loadNotifications])
 
   useEffect(() => {
     if (!menuOpen && !notifOpen && !chatListOpen) return
@@ -143,30 +187,40 @@ export default function Navbar() {
 
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
-          <button onClick={() => { setNotifOpen(!notifOpen); setMenuOpen(false); setChatListOpen(false) }}
+          <button onClick={() => {
+            const opening = !notifOpen
+            setNotifOpen(opening); setMenuOpen(false); setChatListOpen(false)
+            if (opening && unreadCount > 0) {
+              markAllNotificationsRead().then(() => setUnreadCount(0))
+            }
+          }}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-bg3 hover:bg-bg2 transition-colors relative">
             <Bell size={16} className="text-text-secondary" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink rounded-full" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 bg-pink rounded-full text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
           {notifOpen && (
             <div className="absolute left-0 top-12 w-72 max-w-[calc(100vw-2rem)] bg-bg2 rounded-xl overflow-hidden z-50" style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 8px 40px rgba(0,0,0,0.8)' }}>
-              <div className="px-4 py-3 border-b border-border">
+              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                 <p className="text-sm font-semibold">התראות</p>
+                {notifications.length > 0 && <Bell size={13} className="text-text-muted" />}
               </div>
-              {[
-                { text: 'אבי כהן הזמין אותך לחדר יצירה', time: 'לפני 10 דקות', dot: 'bg-purple' },
-                { text: 'יעל לוי לייקה את הפוסט שלך', time: 'לפני שעה', dot: 'bg-pink' },
-                { text: 'הסכם Splits מחכה לחתימתך', time: 'לפני 3 שעות', dot: 'bg-warning' },
-                { text: 'רון כץ הגיב על הסקיצה שלך', time: 'אתמול', dot: 'bg-info' },
-              ].map((n, i) => (
-                <div key={i} className="px-4 py-3 hover:bg-bg3 cursor-pointer transition-colors flex items-start gap-3 border-b border-border/50 last:border-0">
-                  <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${n.dot}`} />
-                  <div>
-                    <p className="text-sm text-text-primary">{n.text}</p>
-                    <p className="text-xs text-text-muted mt-0.5">{n.time}</p>
+              <div className="max-h-96 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-text-muted text-sm">אין התראות חדשות</div>
+                ) : notifications.map(n => (
+                  <div key={n.id} className={`px-4 py-3 hover:bg-bg3 cursor-pointer transition-colors flex items-start gap-3 border-b border-border/50 last:border-0 ${!n.read ? 'bg-purple/5' : ''}`}>
+                    <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${NOTIF_DOT[n.type] ?? 'bg-text-muted'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-text-primary">{notifText(n)}</p>
+                      <p className="text-xs text-text-muted mt-0.5">{relativeTime(n.created_at)}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
