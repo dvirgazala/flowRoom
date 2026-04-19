@@ -55,6 +55,7 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
       setFollowing(true)
       setFollowersCount(c => c + 1)
       showToast(`עוקב אחרי ${user.name.split(' ')[0]}! 🎵`, 'success')
+      db.createNotification({ userId: id, fromUserId: currentUser.id, type: 'follow' })
     }
     setFollowLoading(false)
   }

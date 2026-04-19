@@ -284,6 +284,10 @@ export default function FeedPage() {
         ? { ...p, likes: post.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !post.isLiked }
         : p) ?? null)
       await db.togglePostLike(post.id, post.isLiked)
+      // Notify post author (only on new like, not unlike, and not your own post)
+      if (!post.isLiked && post.userId !== user.id && hasSupabase) {
+        db.createNotification({ userId: post.userId, fromUserId: user.id, type: 'like', postId: post.id })
+      }
     } else {
       likePost(post.id)
     }
@@ -314,6 +318,11 @@ export default function FeedPage() {
       }
       setCommentsMap(prev => ({ ...prev, [postId]: [...(prev[postId] || []), newComment] }))
       setDbPosts(prev => prev?.map(p => p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p) ?? null)
+      // Notify post author
+      const postAuthorId = dbPosts?.find(p => p.id === postId)?.userId
+      if (postAuthorId && postAuthorId !== user.id && hasSupabase) {
+        db.createNotification({ userId: postAuthorId, fromUserId: user.id, type: 'comment', postId })
+      }
     } else {
       storeAddComment(postId, text)
     }
