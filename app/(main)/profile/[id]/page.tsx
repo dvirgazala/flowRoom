@@ -16,8 +16,8 @@ import {
 
 export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { currentUser, showToast } = useStore()
-  const user = getUserById(id) || USERS[0]
+  const { currentUser, showToast, users } = useStore()
+  const user = users.find(u => u.id === id) || getUserById(id) || USERS[0]
   const [activeTab, setActiveTab] = useState<'portfolio' | 'media' | 'collabs' | 'about'>('portfolio')
   const [dmOpen, setDmOpen] = useState(false)
   const tabsRef = useRef<HTMLDivElement>(null)

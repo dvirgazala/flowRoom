@@ -69,8 +69,9 @@ const PRIVACY_OPTIONS = [
 ]
 
 export default function FeedPage() {
-  const { currentUser, posts, likePost, addComment, likeComment, dislikeComment, addPost, updatePost, deletePost, showToast } = useStore()
+  const { currentUser, posts, users, likePost, addComment, likeComment, dislikeComment, addPost, updatePost, deletePost, showToast } = useStore()
   const user = currentUser || USERS[0]
+  const findUser = (id: string) => users.find(u => u.id === id) || getUserById(id)
 
   // Compose state
   const [newPost, setNewPost] = useState('')
@@ -509,7 +510,7 @@ export default function FeedPage() {
 
         {/* ── Posts ───────────────────────────────────────────────────────── */}
         {posts.map(post => {
-          const author = getUserById(post.userId)
+          const author = findUser(post.userId)
           if (!author) return null
 
           const allComments = [...(post.comments || [])].sort((a, b) => {
@@ -661,7 +662,7 @@ export default function FeedPage() {
               {isOpen && allComments.length > 0 && (
                 <div className="border-t border-border/40 bg-bg2/40 px-4 pt-3 pb-2 space-y-2.5">
                   {visibleComments.map(c => {
-                    const cu = getUserById(c.userId)
+                    const cu = findUser(c.userId)
                     if (!cu) return null
                     return (
                       <div key={c.id} className="flex items-start gap-2 fade-in">
