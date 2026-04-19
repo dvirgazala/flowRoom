@@ -1,12 +1,13 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS } from '@/lib/data'
+import * as db from '@/lib/db'
 import Avatar from '@/components/Avatar'
 import VerifiedBadge from '@/components/VerifiedBadge'
 import ProfileHoverCard from '@/components/ProfileHoverCard'
-import { Search, SlidersHorizontal, Star, Music2, Users, Zap, MapPin, Trophy } from 'lucide-react'
+import { Search, SlidersHorizontal, Star, Music2, Users, Zap, MapPin, Trophy, UserPlus, UserCheck } from 'lucide-react'
 
 const ROLE_FILTERS = ['הכל', 'מפיק', 'כותב/ת', 'זמר/ת', 'מיקס', 'גיטריסט', 'DJ']
 const GENRE_FILTERS = ['הכל', 'פופ', 'R&B', 'אלקטרוני', 'היפהופ', 'מזרחי', 'רוק', 'אינדי']
@@ -14,6 +15,23 @@ const GENRE_FILTERS = ['הכל', 'פופ', 'R&B', 'אלקטרוני', 'היפה�
 export default function DiscoverPage() {
   const { currentUser, showToast } = useStore()
   const [search, setSearch] = useState('')
+  const [followMap, setFollowMap] = useState<Record<string, boolean>>({})
+  const [followLoading, setFollowLoading] = useState<Record<string, boolean>>({})
+
+  const handleFollow = useCallback(async (userId: string, name: string) => {
+    if (!currentUser || followLoading[userId]) return
+    setFollowLoading(prev => ({ ...prev, [userId]: true }))
+    const isNowFollowing = !followMap[userId]
+    setFollowMap(prev => ({ ...prev, [userId]: isNowFollowing }))
+    if (isNowFollowing) {
+      await db.followUser(userId)
+      showToast(`עוקב אחרי ${name.split(' ')[0]}! 🎵`, 'success')
+    } else {
+      await db.unfollowUser(userId)
+      showToast('הפסקת לעקוב', 'info')
+    }
+    setFollowLoading(prev => ({ ...prev, [userId]: false }))
+  }, [currentUser, followMap, followLoading, showToast])
   const [roleFilter, setRoleFilter] = useState('הכל')
   const [genreFilter, setGenreFilter] = useState('הכל')
   const [showFilters, setShowFilters] = useState(false)
@@ -192,10 +210,15 @@ export default function DiscoverPage() {
 
             {/* Actions */}
             <div className="flex gap-2">
-              <button onClick={() => showToast(`בקשת שיתוף פעולה נשלחה ל${u.name}!`, 'success')}
-                className="flex-1 py-2 bg-brand-gradient rounded-xl text-xs font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-glow-sm flex items-center justify-center gap-1.5">
-                <Zap size={11} />
-                שתף פעולה
+              <button
+                onClick={() => handleFollow(u.id, u.name)}
+                disabled={followLoading[u.id]}
+                className={`flex-1 py-2 rounded-xl text-xs font-semibold active:scale-95 transition-all flex items-center justify-center gap-1.5
+                  ${followMap[u.id]
+                    ? 'bg-purple/15 border border-purple/30 text-purple hover:bg-danger/10 hover:border-danger/30 hover:text-danger'
+                    : 'bg-brand-gradient text-white hover:opacity-90 shadow-glow-sm'}`}
+              >
+                {followMap[u.id] ? <><UserCheck size={11} />עוקב</> : <><UserPlus size={11} />עקוב</>}
               </button>
               <Link href={`/profile/${u.id}`}
                 className="flex-1 py-2 rounded-xl text-xs text-center text-text-secondary hover:text-text-primary hover:border-purple/40 transition-colors flex items-center justify-center gap-1.5 bg-bg3 border border-border">

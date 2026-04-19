@@ -1,8 +1,9 @@
 'use client'
-import { use, useState, useRef } from 'react'
+import { use, useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS, getUserById } from '@/lib/data'
+import * as db from '@/lib/db'
 import Avatar from '@/components/Avatar'
 import AudioPlayer from '@/components/AudioPlayer'
 import VerifiedBadge from '@/components/VerifiedBadge'
@@ -11,7 +12,7 @@ import type { MediaItem } from '@/lib/types'
 import {
   MapPin, Music2, Star, Users, MessageCircle, Share2, Zap, Trophy, Clock, Play,
   Image as ImageIcon, Video, Film, Heart, Eye, Upload, X, Plus,
-  ChevronLeft, ChevronRight, Download, MoreHorizontal,
+  ChevronLeft, ChevronRight, Download, MoreHorizontal, UserCheck, UserPlus, Loader2,
 } from 'lucide-react'
 
 export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,16 +23,44 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
   const [dmOpen, setDmOpen] = useState(false)
   const tabsRef = useRef<HTMLDivElement>(null)
 
+  // Follow state
+  const [following, setFollowing] = useState<boolean | null>(null)
+  const [followersCount, setFollowersCount] = useState(user.followers)
+  const [followLoading, setFollowLoading] = useState(false)
+
   // Media state
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(user.media ?? [])
   const [lightbox, setLightbox] = useState<{ item: MediaItem; index: number } | null>(null)
   const [showUpload, setShowUpload] = useState(false)
   const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video' | 'reel'>('all')
 
+  const isMe = currentUser?.id === user.id
+
+  // Load follow state from DB
+  useEffect(() => {
+    if (isMe || !currentUser) { setFollowing(false); return }
+    db.isFollowing(id).then(setFollowing)
+  }, [id, isMe, currentUser])
+
+  const handleFollow = async () => {
+    if (!currentUser || followLoading) return
+    setFollowLoading(true)
+    if (following) {
+      await db.unfollowUser(id)
+      setFollowing(false)
+      setFollowersCount(c => Math.max(0, c - 1))
+      showToast('הפסקת לעקוב', 'info')
+    } else {
+      await db.followUser(id)
+      setFollowing(true)
+      setFollowersCount(c => c + 1)
+      showToast(`עוקב אחרי ${user.name.split(' ')[0]}! 🎵`, 'success')
+    }
+    setFollowLoading(false)
+  }
+
   const handleTabChange = (tab: typeof activeTab) => {
     setActiveTab(tab)
-    // Keep scroll anchored to the tabs row instead of letting the browser snap
-    // when content height changes drastically between tabs.
     requestAnimationFrame(() => {
       const el = tabsRef.current
       if (!el) return
@@ -40,12 +69,10 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
     })
   }
 
-  const isMe = currentUser?.id === user.id
-
   const stats = [
     { label: 'שירים',    value: user.songs },
     { label: 'שיתופים', value: user.collabs },
-    { label: 'עוקבים',  value: user.followers },
+    { label: 'עוקבים',  value: followersCount },
     { label: 'דירוג',   value: user.rating.toFixed(1) },
   ]
 
@@ -118,9 +145,20 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
                     <Zap size={14} />
                     שתף פעולה
                   </button>
-                  <button onClick={() => showToast('עוקב!', 'success')}
-                    className="px-4 py-2 bg-bg3 border border-border rounded-xl text-sm text-text-secondary hover:text-text-primary hover:border-purple/40 active:scale-95 transition-all">
-                    עקוב
+                  <button
+                    onClick={handleFollow}
+                    disabled={followLoading || following === null}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium active:scale-95 transition-all border disabled:opacity-60
+                      ${following
+                        ? 'bg-purple/15 border-purple/40 text-purple hover:bg-danger/10 hover:border-danger/40 hover:text-danger'
+                        : 'bg-bg3 border-border text-text-secondary hover:border-purple/40 hover:text-purple'}`}
+                  >
+                    {followLoading
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : following
+                        ? <><UserCheck size={14} />עוקב</>
+                        : <><UserPlus size={14} />עקוב</>
+                    }
                   </button>
                   <button onClick={() => setDmOpen(true)}
                     className="p-2.5 bg-bg3 border border-border rounded-xl text-text-secondary hover:text-purple hover:border-purple/40 active:scale-95 transition-all"
