@@ -54,8 +54,10 @@ export default function DmChatModal({ userId, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] flex items-end sm:items-center justify-center p-4 modal-backdrop" onClick={onClose}>
-      <div className="bg-bg1 rounded-2xl w-full max-w-md flex flex-col modal-card" style={{ height: 480, boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 16px 64px rgba(0,0,0,0.85)' }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] flex items-end sm:items-center justify-center sm:p-4 modal-backdrop" onClick={onClose}>
+      <div className="bg-bg1 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md flex flex-col modal-card"
+        style={{ height: 'min(480px, calc(100dvh - env(safe-area-inset-top) - 64px))', maxWidth: '100vw', boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 16px 64px rgba(0,0,0,0.85)' }}
+        onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center gap-3 p-4 border-b border-border flex-shrink-0">
           <Avatar user={user} size="md" showOnline />

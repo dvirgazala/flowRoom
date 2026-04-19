@@ -13,7 +13,7 @@ export default function ProfileCompletionModal({ onDone }: { onDone: () => void 
 
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
-  const [role, setRole] = useState('')
+  const [roles, setRoles] = useState<string[]>([])
   const [bio, setBio] = useState('')
   const [location, setLocation] = useState('')
   const [website, setWebsite] = useState('')
@@ -44,7 +44,7 @@ export default function ProfileCompletionModal({ onDone }: { onDone: () => void 
 
       await updateProfile(session.user.id, {
         avatar_url: avatarUrl,
-        role,
+        role: roles.join(' / '),
         bio,
         location,
         website,
@@ -92,15 +92,22 @@ export default function ProfileCompletionModal({ onDone }: { onDone: () => void 
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-2">אני יוצר/ת —</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">אני יוצר/ת — <span className="text-text-muted font-normal">(ניתן לבחור כמה תפקידים)</span></label>
+              {roles.length > 0 && (
+                <p className="text-[11px] text-purple mb-2">{roles.join(' · ')}</p>
+              )}
               <div className="flex flex-wrap gap-2">
-                {ROLES.map(r => (
-                  <button key={r} type="button" onClick={() => setRole(r)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
-                      ${role === r ? 'bg-purple/20 border-purple text-purple' : 'bg-bg3 border-border text-text-secondary hover:border-purple/50'}`}>
-                    {r}
-                  </button>
-                ))}
+                {ROLES.map(r => {
+                  const selected = roles.includes(r)
+                  return (
+                    <button key={r} type="button"
+                      onClick={() => setRoles(prev => selected ? prev.filter(x => x !== r) : [...prev, r])}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                        ${selected ? 'bg-purple/20 border-purple text-purple' : 'bg-bg3 border-border text-text-secondary hover:border-purple/50'}`}>
+                      {selected && <span className="mr-1">✓</span>}{r}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 

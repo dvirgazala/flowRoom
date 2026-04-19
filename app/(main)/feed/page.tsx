@@ -190,6 +190,7 @@ export default function FeedPage() {
     if (!text.trim()) return
     addComment(postId, text)
     setCommentTexts(prev => ({ ...prev, [postId]: '' }))
+    setExpandedComments(prev => ({ ...prev, [postId]: true }))
   }
 
   const handleApply = () => {
@@ -440,7 +441,7 @@ export default function FeedPage() {
               </button>
             </div>
             {/* Body */}
-            <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(90dvh - 80px)' }}>
+            <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(90dvh - 80px)', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
               {composeBody}
             </div>
           </div>
@@ -511,12 +512,17 @@ export default function FeedPage() {
           const author = getUserById(post.userId)
           if (!author) return null
 
-          const allComments = [...(post.comments || [])].sort((a, b) => (b.likes || 0) - (a.likes || 0))
+          const allComments = [...(post.comments || [])].sort((a, b) => {
+            const aIsMe = a.userId === user.id ? 1 : 0
+            const bIsMe = b.userId === user.id ? 1 : 0
+            if (bIsMe !== aIsMe) return bIsMe - aIsMe
+            return (b.likes || 0) - (a.likes || 0)
+          })
           const isOpen = expandedComments[post.id] || false
           const visibleComments = allComments
 
           return (
-            <div key={post.id} className="bg-bg1 rounded-2xl shadow-surface overflow-hidden fade-in hover:shadow-glow transition-all duration-200">
+            <div key={post.id} className="bg-bg1 rounded-2xl shadow-surface fade-in hover:shadow-glow transition-all duration-200">
               <div className="p-4">
                 {/* Header */}
                 <div className="flex items-start gap-3 mb-3">

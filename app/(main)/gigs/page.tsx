@@ -12,7 +12,7 @@ import {
   Mic2, Music2, Wand2, FileText, Headphones, Megaphone, BookOpen,
   X, Check, ChevronRight, Send, Loader2,
   Shield, Users, TrendingUp, SlidersHorizontal,
-  ArrowRight, CheckCircle2,
+  ArrowRight, CheckCircle2, ChevronDown, Filter,
 } from 'lucide-react'
 import type { User } from '@/lib/types'
 
@@ -280,7 +280,7 @@ export default function GigsPage() {
         <button
           onClick={() => setMode('gigs')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all
-            ${mode === 'gigs' ? 'bg-bg1 text-text-primary shadow-surface' : 'text-text-muted hover:text-text-secondary'}`}
+            ${mode === 'gigs' ? 'bg-bg1 text-text-primary shadow-surface' : 'text-text-secondary hover:text-text-primary'}`}
         >
           <Zap size={15} className={mode === 'gigs' ? 'text-purple' : ''} />
           מציעי שירות
@@ -289,7 +289,7 @@ export default function GigsPage() {
         <button
           onClick={() => setMode('jobs')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all
-            ${mode === 'jobs' ? 'bg-bg1 text-text-primary shadow-surface' : 'text-text-muted hover:text-text-secondary'}`}
+            ${mode === 'jobs' ? 'bg-bg1 text-text-primary shadow-surface' : 'text-text-secondary hover:text-text-primary'}`}
         >
           <Briefcase size={15} className={mode === 'jobs' ? 'text-purple' : ''} />
           עבודות פתוחות
@@ -322,13 +322,13 @@ export default function GigsPage() {
             </select>
           )}
           <button onClick={() => setShowFilters(p => !p)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-all
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm border transition-all flex-shrink-0
               ${showFilters || category !== 'הכל'
                 ? 'bg-purple/15 border-purple/40 text-purple'
                 : 'bg-bg3 border-border text-text-secondary hover:text-text-primary hover:border-purple/40'}`}>
             <SlidersHorizontal size={15} />
-            קטגוריות
-            {category !== 'הכל' && <span className="text-[10px] bg-purple/25 rounded-full px-1.5">{category}</span>}
+            <span className="hidden sm:inline">קטגוריות</span>
+            {category !== 'הכל' && <span className="text-[10px] bg-purple text-white rounded-full px-1.5 py-0.5 max-w-[80px] truncate">{category}</span>}
           </button>
         </div>
         {showFilters && (
@@ -495,6 +495,138 @@ function JobsList({ jobs, onApply, onContact }: { jobs: Job[]; onApply: (j: Job)
 
 // ─── Gig Detail Modal (Fiverr style) ─────────────────────────────────────────
 
+// ─── Reviews Modal ───────────────────────────────────────────────────────────
+
+const ALL_MOCK_REVIEWS = [
+  { name: 'דנה מ.', rating: 5, text: 'עבודה מדהימה! מקצועי, מדויק, ועומד בזמנים. ממליצה בחום.', time: 'לפני שבוע', category: 'מיקס' },
+  { name: 'עמית כ.', rating: 5, text: 'תוצאה מצוינת. הסאונד יצא בדיוק כמו שרציתי.', time: 'לפני חודש', category: 'מאסטר' },
+  { name: 'לירון ש.', rating: 4, text: 'שירות טוב, תקשורת מהירה. אחזור שוב.', time: 'לפני חודשיים', category: 'מיקס' },
+  { name: 'איתי ב.', rating: 5, text: 'מעולה! תיקונים מהירים וסבלנות לאורך כל הדרך.', time: 'לפני 3 חודשים', category: 'מאסטר' },
+  { name: 'נועה ל.', rating: 5, text: 'הבינה בדיוק את הווייב שחיפשתי. תוצר מושלם.', time: 'לפני 4 חודשים', category: 'מיקס' },
+  { name: 'רון ק.', rating: 4, text: 'מקצועיות גבוהה, ערך כספי טוב.', time: 'לפני 5 חודשים', category: 'מאסטר' },
+  { name: 'שיר ד.', rating: 5, text: 'זו הפעם השנייה שאני עובד איתו. שווה כל שקל.', time: 'לפני 6 חודשים', category: 'מיקס' },
+  { name: 'מיה ג.', rating: 5, text: 'הזמנתי שוב ישירות אחרי השיר הקודם — תוצאה נהדרת.', time: 'לפני 7 חודשים', category: 'מאסטר' },
+  { name: 'אבי פ.', rating: 3, text: 'עבודה סבירה, אבל הייתה עיכוב במסירה.', time: 'לפני 8 חודשים', category: 'מיקס' },
+  { name: 'תמר ס.', rating: 4, text: 'מרוצה מהתוצאה הסופית, תקשורת טובה.', time: 'לפני 9 חודשים', category: 'מאסטר' },
+]
+
+type ReviewSort = 'newest' | 'highest' | 'lowest'
+
+function ReviewsModal({ gig, onClose }: { gig: Gig; onClose: () => void }) {
+  const [ratingFilter, setRatingFilter] = useState<number | null>(null)
+  const [sortBy, setSortBy] = useState<ReviewSort>('newest')
+
+  const filtered = ALL_MOCK_REVIEWS
+    .filter(r => ratingFilter === null || r.rating === ratingFilter)
+    .sort((a, b) => {
+      if (sortBy === 'highest') return b.rating - a.rating
+      if (sortBy === 'lowest') return a.rating - b.rating
+      return 0
+    })
+
+  const avgRating = gig.rating
+  const distribution = [5, 4, 3, 2, 1].map(stars => ({
+    stars,
+    count: ALL_MOCK_REVIEWS.filter(r => r.rating === stars).length,
+    pct: Math.round((ALL_MOCK_REVIEWS.filter(r => r.rating === stars).length / ALL_MOCK_REVIEWS.length) * 100),
+  }))
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[400] flex items-start justify-center p-4 pb-24 md:pb-4 overflow-y-auto modal-backdrop" onClick={onClose}>
+      <div className="bg-bg1 rounded-2xl w-full max-w-2xl my-4 modal-card"
+        style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.07), 0 24px 80px rgba(0,0,0,0.9)' }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Star size={16} className="text-warning fill-warning" />
+            <p className="font-semibold">ביקורות על הגיג</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-text-muted hover:text-text-primary rounded-lg hover:bg-bg3 transition-all">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {/* Rating summary */}
+          <div className="flex flex-col sm:flex-row gap-6 mb-6 p-4 bg-bg2 rounded-2xl">
+            <div className="text-center flex-shrink-0">
+              <p className="text-5xl font-bold mb-1">{avgRating}</p>
+              <div className="flex items-center justify-center gap-0.5 mb-1">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star key={i} size={14} className={i < Math.floor(avgRating) ? 'text-warning fill-warning' : 'text-border'} />
+                ))}
+              </div>
+              <p className="text-xs text-text-muted">{gig.reviews} ביקורות</p>
+            </div>
+            <div className="flex-1 space-y-1.5">
+              {distribution.map(({ stars, count, pct }) => (
+                <button key={stars} onClick={() => setRatingFilter(ratingFilter === stars ? null : stars)}
+                  className={`w-full flex items-center gap-2 text-xs group hover:opacity-80 transition-opacity ${ratingFilter === stars ? 'opacity-100' : 'opacity-80'}`}>
+                  <span className="w-3 text-text-muted text-right">{stars}</span>
+                  <Star size={10} className="text-warning fill-warning flex-shrink-0" />
+                  <div className="flex-1 h-2 bg-bg3 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${ratingFilter === stars ? 'bg-warning' : 'bg-warning/60'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="w-8 text-text-muted text-left">{count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter size={13} className="text-text-muted" />
+              {[null, 5, 4, 3].map(r => (
+                <button key={r ?? 'all'} onClick={() => setRatingFilter(r)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-all
+                    ${ratingFilter === r ? 'bg-warning/15 border-warning/40 text-warning' : 'bg-bg3 border-border text-text-secondary hover:border-warning/40'}`}>
+                  {r === null ? 'הכל' : <><Star size={10} className="fill-current" />{r}★</>}
+                </button>
+              ))}
+            </div>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value as ReviewSort)}
+              className="bg-bg3 border border-border rounded-lg px-2 py-1 text-xs text-text-secondary focus:outline-none focus:border-purple cursor-pointer">
+              <option value="newest">הכי חדש</option>
+              <option value="highest">דירוג גבוה</option>
+              <option value="lowest">דירוג נמוך</option>
+            </select>
+          </div>
+
+          {/* Reviews list */}
+          <div className="space-y-3">
+            {filtered.length === 0 ? (
+              <p className="text-center text-text-muted py-8 text-sm">לא נמצאו ביקורות עם הפילטר הנבחר</p>
+            ) : filtered.map((r, i) => (
+              <div key={i} className="p-4 bg-bg2 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-purple/20 flex items-center justify-center text-xs text-purple font-semibold flex-shrink-0">{r.name[0]}</div>
+                    <div>
+                      <p className="text-sm font-medium">{r.name}</p>
+                      <p className="text-[10px] text-text-muted">{r.time}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    {Array.from({ length: 5 }).map((_, j) => (
+                      <Star key={j} size={11} className={j < r.rating ? 'text-warning fill-warning' : 'text-border'} />
+                    ))}
+                  </div>
+                </div>
+                <p className="text-sm text-text-secondary leading-relaxed">{r.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Gig Detail Modal (Fiverr style) ─────────────────────────────────────────
+
 type GigPackage = 'basic' | 'standard' | 'premium'
 
 function GigDetailModal({ gig, onClose, onContact, onOrder }: {
@@ -505,26 +637,18 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
 }) {
   const user = USERS.find(u => u.id === gig.userId)
   const [pkg, setPkg] = useState<GigPackage>('basic')
-  const [showAllReviews, setShowAllReviews] = useState(false)
+  const [showReviewsModal, setShowReviewsModal] = useState(false)
   if (!user) return null
 
   const pkgPrice  = pkg === 'basic' ? gig.price : pkg === 'standard' ? gig.priceStandard : gig.pricePremium
   const pkgDays   = pkg === 'basic' ? gig.delivery : pkg === 'standard' ? gig.deliveryStandard : gig.deliveryPremium
 
-  const MOCK_REVIEWS = [
-    { name: 'דנה מ.', rating: 5, text: 'עבודה מדהימה! מקצועי, מדויק, ועומד בזמנים. ממליצה בחום.', time: 'לפני שבוע' },
-    { name: 'עמית כ.', rating: 5, text: 'תוצאה מצוינת. הסאונד יצא בדיוק כמו שרציתי.', time: 'לפני חודש' },
-    { name: 'לירון ש.', rating: 4, text: 'שירות טוב, תקשורת מהירה. אחזור שוב.', time: 'לפני חודשיים' },
-    { name: 'איתי ב.', rating: 5, text: 'מעולה! תיקונים מהירים וסבלנות לאורך כל הדרך.', time: 'לפני 3 חודשים' },
-    { name: 'נועה ל.', rating: 5, text: 'הבינה בדיוק את הווייב שחיפשתי. תוצר מושלם.', time: 'לפני 4 חודשים' },
-    { name: 'רון ק.', rating: 4, text: 'מקצועיות גבוהה, ערך כספי טוב.', time: 'לפני 5 חודשים' },
-    { name: 'שיר ד.', rating: 5, text: 'זו הפעם השנייה שאני עובד איתו. שווה כל שקל.', time: 'לפני 6 חודשים' },
-    { name: 'מיה ג.', rating: 5, text: 'הזמנתי שוב ישירות אחרי השיר הקודם — תוצאה נהדרת.', time: 'לפני 7 חודשים' },
-  ]
-  const visibleReviews = showAllReviews ? MOCK_REVIEWS : MOCK_REVIEWS.slice(0, 3)
+  const previewReviews = ALL_MOCK_REVIEWS.slice(0, 2)
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[300] flex items-start justify-center p-4 overflow-y-auto modal-backdrop" onClick={onClose}>
+    <>
+    {showReviewsModal && <ReviewsModal gig={gig} onClose={() => setShowReviewsModal(false)} />}
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[300] flex items-start justify-center p-4 pb-24 md:pb-4 overflow-y-auto modal-backdrop" onClick={onClose}>
       <div className="bg-bg1 rounded-2xl w-full max-w-3xl my-4 modal-card overflow-hidden"
         style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.07), 0 24px 80px rgba(0,0,0,0.9)' }}
         onClick={e => e.stopPropagation()}>
@@ -602,7 +726,7 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
               </div>
             </div>
 
-            {/* Reviews */}
+            {/* Reviews preview */}
             <div>
               <h3 className="font-semibold mb-3 text-sm flex items-center gap-2">
                 ביקורות
@@ -610,8 +734,8 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
                   <Star size={11} className="fill-warning" />{gig.rating} · {gig.reviews} ביקורות
                 </span>
               </h3>
-              <div className="space-y-3">
-                {visibleReviews.map((r, i) => (
+              <div className="space-y-3 mb-3">
+                {previewReviews.map((r, i) => (
                   <div key={i} className="p-4 bg-bg2 rounded-xl">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -627,14 +751,14 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
                   </div>
                 ))}
               </div>
-              {MOCK_REVIEWS.length > 3 && (
-                <button
-                  onClick={() => setShowAllReviews(v => !v)}
-                  className="mt-3 w-full py-2.5 bg-bg3 border border-border hover:border-purple/40 hover:text-purple rounded-xl text-xs font-medium text-text-secondary transition-all"
-                >
-                  {showAllReviews ? 'הצג פחות' : `הצג את כל ${MOCK_REVIEWS.length} הביקורות`}
-                </button>
-              )}
+              <button
+                onClick={() => setShowReviewsModal(true)}
+                className="w-full py-2.5 bg-bg3 border border-border hover:border-purple/40 hover:text-purple rounded-xl text-xs font-medium text-text-secondary transition-all flex items-center justify-center gap-2"
+              >
+                <Star size={12} />
+                {`צפה בכל ${gig.reviews} הביקורות`}
+                <ChevronDown size={12} />
+              </button>
             </div>
           </div>
 
@@ -703,6 +827,7 @@ function GigDetailModal({ gig, onClose, onContact, onOrder }: {
         </div>
       </div>
     </div>
+    </>
   )
 }
 
