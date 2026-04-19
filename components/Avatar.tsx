@@ -30,7 +30,7 @@ const PHOTO_MAP: Record<string, string> = {
 
 export default function Avatar({ user, size = 'md', showOnline = false }: Props) {
   const [imgFailed, setImgFailed] = useState(false)
-  const photoUrl = PHOTO_MAP[user.id]
+  const photoUrl = user.avatarUrl || PHOTO_MAP[user.id]
   const px = imgSizes[size]
 
   return (

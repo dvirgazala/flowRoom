@@ -9,6 +9,7 @@ export interface User {
   location: string
   avatarColor: string
   initials: string
+  avatarUrl?: string
   genres: string[]
   trustScore: number
   songs: number

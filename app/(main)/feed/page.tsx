@@ -1,8 +1,13 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS, getUserById } from '@/lib/data'
+import * as db from '@/lib/db'
+import type { PostWithAuthor, CommentWithAuthor } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
+import { profileToUser, relativeTime } from '@/lib/profile-utils'
+import type { User, FeedPost, FeedComment } from '@/lib/types'
 import Avatar from '@/components/Avatar'
 import AudioPlayer from '@/components/AudioPlayer'
 import VerifiedBadge from '@/components/VerifiedBadge'
@@ -11,7 +16,39 @@ import {
   Heart, MessageCircle, Share2, Send, Zap, Users as UsersIcon,
   Paperclip, Hash, X, Image, Music, Smile, MapPin, Globe, Lock, Users2,
   ThumbsUp, ThumbsDown, ChevronUp, AtSign, Plus, MoreHorizontal, Edit2, Trash2,
+  Loader2,
 } from 'lucide-react'
+
+// ─── DB helpers ───────────────────────────────────────────────────────────────
+
+const hasSupabase = !!(
+  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+)
+
+function dbPostToFeed(p: PostWithAuthor): FeedPost {
+  return {
+    id: p.id,
+    userId: p.user_id,
+    content: p.content,
+    type: p.audio_url ? 'audio' : 'text',
+    audioUrl: p.audio_url ?? undefined,
+    likes: p.likes_count,
+    comments: [],
+    createdAt: relativeTime(p.created_at),
+    isLiked: p.is_liked ?? false,
+  }
+}
+
+function dbCommentToFeed(c: CommentWithAuthor): FeedComment {
+  return {
+    id: c.id,
+    userId: c.user_id,
+    text: c.text,
+    createdAt: relativeTime(c.created_at),
+    likes: c.likes_count,
+    dislikes: c.dislikes_count,
+  }
+}
 
 // ─── Hashtag pool ────────────────────────────────────────────────────────────
 const HASHTAG_POOL = [
@@ -69,9 +106,59 @@ const PRIVACY_OPTIONS = [
 ]
 
 export default function FeedPage() {
-  const { currentUser, posts, users, likePost, addComment, likeComment, dislikeComment, addPost, updatePost, deletePost, showToast } = useStore()
+  const { currentUser, posts: storePosts, users, likePost, addComment: storeAddComment, likeComment, dislikeComment, addPost, updatePost, deletePost: storeDeletePost, showToast } = useStore()
   const user = currentUser || USERS[0]
-  const findUser = (id: string) => users.find(u => u.id === id) || getUserById(id)
+
+  // ── DB-backed feed state ───────────────────────────────────────────────────
+  const [dbPosts, setDbPosts] = useState<FeedPost[] | null>(null)
+  const [authorCache, setAuthorCache] = useState<Record<string, User>>({})
+  const [commentsMap, setCommentsMap] = useState<Record<string, FeedComment[]>>({})
+  const [loadingPosts, setLoadingPosts] = useState(hasSupabase)
+
+  const posts = dbPosts ?? storePosts
+
+  const findUser = useCallback((id: string): User | undefined => {
+    return authorCache[id] || users.find(u => u.id === id) || getUserById(id)
+  }, [authorCache, users])
+
+  // Initial load from DB
+  useEffect(() => {
+    if (!hasSupabase) return
+    db.getFeed(40).then(rows => {
+      const cache: Record<string, User> = {}
+      rows.forEach(p => { if (p.author) cache[p.user_id] = profileToUser(p.author) })
+      setAuthorCache(prev => ({ ...prev, ...cache }))
+      setDbPosts(rows.map(dbPostToFeed))
+      setLoadingPosts(false)
+    }).catch(() => setLoadingPosts(false))
+  }, [])
+
+  // Realtime: new posts appear live for all users
+  useEffect(() => {
+    if (!hasSupabase) return
+    const channel = supabase.channel('feed-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async ({ new: row }) => {
+        const { data } = await supabase
+          .from('posts')
+          .select('*, author:profiles!posts_user_id_fkey(*)')
+          .eq('id', row.id)
+          .single()
+        if (data) {
+          const p = data as unknown as PostWithAuthor
+          if (p.author) setAuthorCache(prev => ({ ...prev, [p.user_id]: profileToUser(p.author) }))
+          setDbPosts(prev => {
+            if (!prev) return prev
+            if (prev.some(x => x.id === p.id)) return prev
+            return [dbPostToFeed(p), ...prev]
+          })
+        }
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, ({ old: row }) => {
+        setDbPosts(prev => prev?.filter(p => p.id !== row.id) ?? null)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   // Compose state
   const [newPost, setNewPost] = useState('')
@@ -160,38 +247,91 @@ export default function FeedPage() {
     textareaRef.current?.focus()
   }
 
-  const submitPost = () => {
+  const submitPost = async () => {
     if (!newPost.trim() && !attachedFile) return
     let content = newPost
     if (mood) content += `\n\n${mood}`
     if (location) content += `\n📍 ${location}`
-    addPost({
-      id: Date.now().toString(),
-      userId: user.id,
-      content,
-      type: 'text',
-      likes: 0,
-      comments: [],
-      createdAt: 'עכשיו',
-      isLiked: false,
-    })
-    setNewPost('')
-    setAttachedFile(null)
-    setMood('')
-    setLocation('')
-    setShowMoodPicker(false)
-    setShowLocationInput(false)
-    setShowHashtags(false)
-    setShowMentions(false)
+    const hashtags = [...content.matchAll(/#(\w+)/g)].map(m => m[1])
+
+    if (dbPosts !== null) {
+      const { data, error } = await db.createPost({ content, mood, location, hashtags }) as { data: { id: string; created_at: string } | null; error: unknown }
+      if (error || !data) { showToast('שגיאה בפרסום', 'error'); return }
+      const optimistic: FeedPost = {
+        id: data.id,
+        userId: user.id,
+        content,
+        type: 'text',
+        likes: 0,
+        comments: [],
+        createdAt: 'עכשיו',
+        isLiked: false,
+      }
+      setDbPosts(prev => prev ? [optimistic, ...prev] : [optimistic])
+    } else {
+      addPost({ id: Date.now().toString(), userId: user.id, content, type: 'text', likes: 0, comments: [], createdAt: 'עכשיו', isLiked: false })
+    }
+
+    setNewPost(''); setAttachedFile(null); setMood(''); setLocation('')
+    setShowMoodPicker(false); setShowLocationInput(false)
+    setShowHashtags(false); setShowMentions(false)
     showToast('הפוסט פורסם! 🎉', 'success')
   }
 
-  const submitComment = (postId: string) => {
+  const handleLikePost = async (post: FeedPost) => {
+    if (dbPosts !== null) {
+      setDbPosts(prev => prev?.map(p => p.id === post.id
+        ? { ...p, likes: post.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !post.isLiked }
+        : p) ?? null)
+      await db.togglePostLike(post.id, post.isLiked)
+    } else {
+      likePost(post.id)
+    }
+  }
+
+  const handleDeletePost = async (postId: string) => {
+    if (dbPosts !== null) {
+      await db.deletePost(postId)
+      setDbPosts(prev => prev?.filter(p => p.id !== postId) ?? null)
+    } else {
+      storeDeletePost(postId)
+    }
+  }
+
+  const submitComment = async (postId: string) => {
     const text = commentTexts[postId] || ''
     if (!text.trim()) return
-    addComment(postId, text)
+
+    if (dbPosts !== null) {
+      const result = await db.addComment(postId, text) as { data: { id: string; created_at: string } | null } | undefined
+      const newComment: FeedComment = {
+        id: result?.data?.id || Date.now().toString(),
+        userId: user.id,
+        text,
+        createdAt: 'עכשיו',
+        likes: 0,
+        dislikes: 0,
+      }
+      setCommentsMap(prev => ({ ...prev, [postId]: [...(prev[postId] || []), newComment] }))
+      setDbPosts(prev => prev?.map(p => p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p) ?? null)
+    } else {
+      storeAddComment(postId, text)
+    }
+
     setCommentTexts(prev => ({ ...prev, [postId]: '' }))
     setExpandedComments(prev => ({ ...prev, [postId]: true }))
+  }
+
+  const handleExpandComments = async (postId: string, isCurrentlyOpen: boolean) => {
+    setExpandedComments(prev => ({ ...prev, [postId]: !isCurrentlyOpen }))
+    if (!isCurrentlyOpen && dbPosts !== null && !commentsMap[postId]) {
+      const rows = await db.getCommentsForPost(postId)
+      const converted = rows.map(c => {
+        if (c.author) setAuthorCache(prev => ({ ...prev, [c.user_id]: profileToUser(c.author) }))
+        return dbCommentToFeed(c)
+      })
+      setCommentsMap(prev => ({ ...prev, [postId]: converted }))
+    }
   }
 
   const handleApply = () => {
@@ -355,7 +495,7 @@ export default function FeedPage() {
                 ביטול
               </button>
               <button
-                onClick={() => { if (confirmDeleteId) deletePost(confirmDeleteId); setConfirmDeleteId(null) }}
+                onClick={() => { if (confirmDeleteId) handleDeletePost(confirmDeleteId); setConfirmDeleteId(null) }}
                 className="flex-1 py-2.5 bg-danger/90 hover:bg-danger rounded-xl text-sm font-semibold text-white active:scale-95 transition-all flex items-center justify-center gap-2">
                 <Trash2 size={13} /> מחק
               </button>
@@ -508,12 +648,22 @@ export default function FeedPage() {
           {composeBody}
         </div>
 
+        {/* ── Loading skeleton ────────────────────────────────────────────── */}
+        {loadingPosts && (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 size={24} className="animate-spin text-purple" />
+          </div>
+        )}
+
         {/* ── Posts ───────────────────────────────────────────────────────── */}
-        {posts.map(post => {
+        {!loadingPosts && posts.map(post => {
           const author = findUser(post.userId)
           if (!author) return null
 
-          const allComments = [...(post.comments || [])].sort((a, b) => {
+          const rawComments = dbPosts !== null
+            ? (commentsMap[post.id] || post.comments || [])
+            : (post.comments || [])
+          const allComments = [...rawComments].sort((a, b) => {
             const aIsMe = a.userId === user.id ? 1 : 0
             const bIsMe = b.userId === user.id ? 1 : 0
             if (bIsMe !== aIsMe) return bIsMe - aIsMe
@@ -638,14 +788,14 @@ export default function FeedPage() {
 
                 {/* Actions — larger tap targets on mobile */}
                 <div className="flex items-center gap-1 sm:gap-5 pt-2 border-t border-border/50">
-                  <button onClick={() => likePost(post.id)}
+                  <button onClick={() => handleLikePost(post)}
                     className={`flex items-center gap-1.5 text-xs transition-all active:scale-90 py-2 px-3 sm:px-0 rounded-lg sm:rounded-none hover:bg-bg3 sm:hover:bg-transparent
                       ${post.isLiked ? 'text-pink' : 'text-text-muted hover:text-pink'}`}>
                     <Heart size={17} fill={post.isLiked ? 'currentColor' : 'none'} />
                     <span>{post.likes}</span>
                   </button>
                   <button
-                    onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: !isOpen }))}
+                    onClick={() => handleExpandComments(post.id, isOpen)}
                     className="flex items-center gap-1.5 text-xs text-text-muted hover:text-info active:scale-95 transition-all py-2 px-3 sm:px-0 rounded-lg sm:rounded-none hover:bg-bg3 sm:hover:bg-transparent">
                     <MessageCircle size={17} />
                     <span>{allComments.length}</span>
@@ -698,7 +848,7 @@ export default function FeedPage() {
                   })}
 
                   <button
-                    onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: false }))}
+                    onClick={() => handleExpandComments(post.id, true)}
                     className="flex items-center gap-1 text-xs text-purple hover:text-pink transition-colors py-1">
                     <ChevronUp size={13} /> הסתר תגובות
                   </button>
