@@ -115,6 +115,7 @@ export interface FeedPost {
   type: 'audio' | 'text' | 'collab'
   audioUrl?: string
   audioDuration?: string
+  mediaUrls?: string[]
   likes: number
   comments: FeedComment[]
   createdAt: string

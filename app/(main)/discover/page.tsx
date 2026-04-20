@@ -1,13 +1,17 @@
 'use client'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS } from '@/lib/data'
 import * as db from '@/lib/db'
+import { profileToUser } from '@/lib/profile-utils'
+import type { User } from '@/lib/types'
 import Avatar from '@/components/Avatar'
 import VerifiedBadge from '@/components/VerifiedBadge'
 import ProfileHoverCard from '@/components/ProfileHoverCard'
-import { Search, SlidersHorizontal, Star, Music2, Users, Zap, MapPin, Trophy, UserPlus, UserCheck } from 'lucide-react'
+import { Search, SlidersHorizontal, Star, Music2, Users, Zap, MapPin, Trophy, UserPlus, UserCheck, Loader2 } from 'lucide-react'
+
+const hasSupabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 
 const ROLE_FILTERS = ['הכל', 'מפיק', 'כותב/ת', 'זמר/ת', 'מיקס', 'גיטריסט', 'DJ']
 const GENRE_FILTERS = ['הכל', 'פופ', 'R&B', 'אלקטרוני', 'היפהופ', 'מזרחי', 'רוק', 'אינדי']
@@ -37,8 +41,20 @@ export default function DiscoverPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [sortBy, setSortBy] = useState<'rating' | 'followers' | 'trust' | 'online'>('rating')
 
+  // Real users from DB (falls back to seed data)
+  const [allUsers, setAllUsers] = useState<User[]>(() => USERS)
+  const [loadingUsers, setLoadingUsers] = useState(hasSupabase)
+
+  useEffect(() => {
+    if (!hasSupabase) return
+    db.listAllProfiles(100).then(profiles => {
+      if (profiles.length > 0) setAllUsers(profiles.map(profileToUser))
+      setLoadingUsers(false)
+    }).catch(() => setLoadingUsers(false))
+  }, [])
+
   const filtered = useMemo(() => {
-    let list = USERS.filter(u => u.id !== currentUser?.id)
+    let list = allUsers.filter(u => u.id !== currentUser?.id)
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(u =>
@@ -58,11 +74,12 @@ export default function DiscoverPage() {
       if (sortBy === 'followers') return b.followers - a.followers
       if (sortBy === 'trust') return b.trustScore - a.trustScore
       if (sortBy === 'online') return (b.isOnline ? 1 : 0) - (a.isOnline ? 1 : 0)
+
       return b.rating - a.rating
     })
-  }, [search, roleFilter, genreFilter, sortBy, currentUser])
+  }, [search, roleFilter, genreFilter, sortBy, currentUser, allUsers])
 
-  const onlineCount = USERS.filter(u => u.isOnline).length
+  const onlineCount = allUsers.filter(u => u.isOnline).length
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -144,6 +161,10 @@ export default function DiscoverPage() {
       </div>
 
       {/* Results count */}
+      {loadingUsers ? (
+        <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-purple" /></div>
+      ) : (
+      <>
       <p className="text-text-muted text-xs mb-4">{filtered.length} יוצרים נמצאו</p>
 
       {/* User grid */}
@@ -237,6 +258,8 @@ export default function DiscoverPage() {
           <button onClick={() => { setSearch(''); setRoleFilter('הכל'); setGenreFilter('הכל') }}
             className="mt-3 text-purple text-sm hover:underline">נקה חיפוש</button>
         </div>
+      )}
+      </>
       )}
     </div>
   )

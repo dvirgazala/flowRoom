@@ -32,6 +32,7 @@ function dbPostToFeed(p: PostWithAuthor): FeedPost {
     content: p.content,
     type: p.audio_url ? 'audio' : 'text',
     audioUrl: p.audio_url ?? undefined,
+    mediaUrls: p.media_urls ?? [],
     likes: p.likes_count,
     comments: [],
     createdAt: relativeTime(p.created_at),
@@ -182,6 +183,18 @@ export default function FeedPage() {
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({})
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
 
+  // Upload progress
+  const [uploading, setUploading] = useState(false)
+
+  // Image preview for composer
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!attachedFile?.type.startsWith('image/')) { setPreviewUrl(null); return }
+    const url = URL.createObjectURL(attachedFile)
+    setPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [attachedFile])
+
   // Post menu + edit
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [editPostId, setEditPostId] = useState<string | null>(null)
@@ -254,14 +267,29 @@ export default function FeedPage() {
     if (location) content += `\n📍 ${location}`
     const hashtags = [...content.matchAll(/#(\w+)/g)].map(m => m[1])
 
+    let mediaUrls: string[] = []
+    let audioUrl: string | null = null
+
+    if (attachedFile && hasSupabase) {
+      setUploading(true)
+      const url = await db.uploadFile(attachedFile, 'post-media')
+      setUploading(false)
+      if (url) {
+        if (attachedFile.type.startsWith('image/')) mediaUrls = [url]
+        else if (attachedFile.type.startsWith('audio/')) audioUrl = url
+      }
+    }
+
     if (dbPosts !== null) {
-      const { data, error } = await db.createPost({ content, mood, location, hashtags }) as { data: { id: string; created_at: string } | null; error: unknown }
+      const { data, error } = await db.createPost({ content, mood, location, hashtags, mediaUrls, audioUrl }) as { data: { id: string; created_at: string } | null; error: unknown }
       if (error || !data) { showToast('שגיאה בפרסום', 'error'); return }
       const optimistic: FeedPost = {
         id: data.id,
         userId: user.id,
         content,
-        type: 'text',
+        type: audioUrl ? 'audio' : 'text',
+        audioUrl: audioUrl ?? undefined,
+        mediaUrls,
         likes: 0,
         comments: [],
         createdAt: 'עכשיו',
@@ -417,13 +445,23 @@ export default function FeedPage() {
       )}
 
       {attachedFile && (
-        <div className="flex items-center gap-2 mb-3 px-2 py-2 bg-bg3 rounded-xl border border-border">
-          <Paperclip size={13} className="text-purple flex-shrink-0" />
-          <span className="text-xs text-text-secondary flex-1 truncate">{attachedFile.name}</span>
-          <button onClick={() => setAttachedFile(null)} className="text-text-muted hover:text-danger transition-colors">
-            <X size={14} />
-          </button>
-        </div>
+        attachedFile.type.startsWith('image/') && previewUrl ? (
+          <div className="relative mb-3 rounded-xl overflow-hidden">
+            <img src={previewUrl} alt="" className="w-full max-h-72 object-cover" />
+            <button onClick={() => setAttachedFile(null)}
+              className="absolute top-2 left-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 mb-3 px-2 py-2 bg-bg3 rounded-xl border border-border">
+            <Paperclip size={13} className="text-purple flex-shrink-0" />
+            <span className="text-xs text-text-secondary flex-1 truncate">{attachedFile.name}</span>
+            <button onClick={() => setAttachedFile(null)} className="text-text-muted hover:text-danger transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+        )
       )}
 
       {showMoodPicker && (
@@ -477,10 +515,10 @@ export default function FeedPage() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-          <button onClick={submitPost} disabled={!newPost.trim() && !attachedFile}
+          <button onClick={submitPost} disabled={(!newPost.trim() && !attachedFile) || uploading}
             className="flex items-center gap-2 px-4 py-2 bg-brand-gradient rounded-xl text-xs font-semibold text-white hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 shadow-glow-sm">
-            <Send size={13} />
-            פרסם
+            {uploading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+            {uploading ? 'מעלה...' : 'פרסם'}
           </button>
         </div>
       </div>
@@ -772,6 +810,15 @@ export default function FeedPage() {
                           : <span key={i}>{word}</span>
                     )}
                   </p>
+                )}
+
+                {/* Images */}
+                {post.mediaUrls && post.mediaUrls.length > 0 && (
+                  <div className={`mb-3 rounded-xl overflow-hidden ${post.mediaUrls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
+                    {post.mediaUrls.map((url, i) => (
+                      <img key={i} src={url} alt="" className="w-full object-cover max-h-96" />
+                    ))}
+                  </div>
                 )}
 
                 {/* Audio */}

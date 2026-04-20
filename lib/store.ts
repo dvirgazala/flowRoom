@@ -18,6 +18,7 @@ interface AppState {
   currentUser: User | null
   login: (userId: string) => void
   logout: () => void
+  updateCurrentUser: (patch: Partial<User>) => void
 
   // Users (mutable copy for admin actions)
   users: User[]
@@ -107,6 +108,11 @@ export const useStore = create<AppState>()(
       },
 
       logout: () => set({ currentUser: null }),
+
+      updateCurrentUser: (patch) => set(s => ({
+        currentUser: s.currentUser ? { ...s.currentUser, ...patch } : null,
+        users: s.users.map(u => u.id === s.currentUser?.id ? { ...u, ...patch } : u),
+      })),
 
       deleteUser: (id) => {
         set(s => ({ users: s.users.filter(u => u.id !== id) }))

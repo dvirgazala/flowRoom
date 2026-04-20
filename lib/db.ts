@@ -366,6 +366,20 @@ export async function markAllNotificationsRead() {
   return supabase.from('notifications').update({ read: true }).eq('user_id', session.user.id).eq('read', false)
 }
 
+// ============================================================
+// STORAGE
+// ============================================================
+export async function uploadFile(file: File, bucket: 'post-media' | 'avatars'): Promise<string | null> {
+  const session = await getSession()
+  if (!session) return null
+  const ext = file.name.split('.').pop() ?? 'bin'
+  const path = `${session.user.id}/${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true })
+  if (error) return null
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+  return data.publicUrl
+}
+
 export async function createNotification(opts: {
   userId:     string
   fromUserId?: string

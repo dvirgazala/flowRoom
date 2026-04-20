@@ -1,10 +1,13 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useStore } from '@/lib/store'
 import Avatar from '@/components/Avatar'
 import VerifiedBadge from '@/components/VerifiedBadge'
 import { USERS } from '@/lib/data'
-import { Shield, CreditCard, User, Lock, CheckCircle2, Clock, Upload, Phone, IdCard, Music2, ChevronLeft, Moon, Sun } from 'lucide-react'
+import * as db from '@/lib/db'
+import { Shield, CreditCard, User, Lock, CheckCircle2, Clock, Upload, Phone, IdCard, Music2, Moon, Sun, Loader2 } from 'lucide-react'
+
+const hasSupabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 
 type Tab = 'general' | 'verify' | 'bank' | 'privacy'
 
@@ -20,9 +23,53 @@ const VERIFY_STEPS = [
 const BANKS = ['בנק הפועלים', 'בנק לאומי', 'בנק דיסקונט', 'מזרחי-טפחות', 'בנק הבינלאומי', 'בנק ירושלים', 'בנק אוצר החייל']
 
 export default function SettingsPage() {
-  const { currentUser, showToast, theme, setTheme } = useStore()
+  const { currentUser, updateCurrentUser, showToast, theme, setTheme } = useStore()
   const user = currentUser || USERS[0]
   const [tab, setTab] = useState<Tab>('general')
+
+  // General tab state
+  const [displayName, setDisplayName] = useState(user.name)
+  const [bioText, setBioText] = useState(user.bio || '')
+  const [locationText, setLocationText] = useState(user.location || '')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatarUrl || null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAvatarChange = (file: File) => {
+    setAvatarFile(file)
+    const url = URL.createObjectURL(file)
+    setAvatarPreview(url)
+  }
+
+  const saveProfile = async () => {
+    if (!displayName.trim()) { showToast('שם לא יכול להיות ריק', 'error'); return }
+    setSavingProfile(true)
+    let newAvatarUrl = user.avatarUrl
+
+    if (avatarFile && hasSupabase) {
+      const url = await db.uploadFile(avatarFile, 'avatars')
+      if (url) newAvatarUrl = url
+    }
+
+    if (hasSupabase) {
+      await db.updateProfile(user.id, {
+        display_name: displayName.trim(),
+        bio: bioText.trim(),
+        location: locationText.trim(),
+        ...(newAvatarUrl && newAvatarUrl !== user.avatarUrl ? { avatar_url: newAvatarUrl } : {}),
+      })
+    }
+
+    updateCurrentUser({
+      name: displayName.trim(),
+      bio: bioText.trim(),
+      location: locationText.trim(),
+      ...(newAvatarUrl ? { avatarUrl: newAvatarUrl } : {}),
+    })
+    setSavingProfile(false)
+    showToast('הפרטים עודכנו בהצלחה!', 'success')
+  }
 
   // Verify state
   const [steps, setSteps] = useState(VERIFY_STEPS)
@@ -89,37 +136,48 @@ export default function SettingsPage() {
             <div className="bg-bg1 rounded-2xl p-6 space-y-4 shadow-surface">
               <h2 className="font-semibold mb-4">פרטים אישיים</h2>
               <div className="flex items-center gap-4 mb-6 pb-6 border-b border-border">
-                <Avatar user={user} size="xl" />
+                <div className="relative">
+                  {avatarPreview
+                    ? <img src={avatarPreview} alt="" className="w-16 h-16 rounded-full object-cover ring-2 ring-purple/30" />
+                    : <Avatar user={{ ...user, avatarUrl: undefined }} size="xl" />}
+                </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-bold text-lg">{user.name}</p>
+                    <p className="font-bold text-lg">{displayName}</p>
                     {user.isVerified && <VerifiedBadge size={16} />}
                   </div>
-                  <p className="text-text-muted text-sm">{user.role} · {user.location}</p>
-                  <button onClick={() => showToast('העלאת תמונה — בקרוב', 'info')}
+                  <p className="text-text-muted text-sm">{user.role} · {locationText || 'הוסף מיקום'}</p>
+                  <button onClick={() => avatarInputRef.current?.click()}
                     className="mt-2 text-xs text-purple hover:underline flex items-center gap-1">
                     <Upload size={12} /> שנה תמונת פרופיל
                   </button>
+                  <input ref={avatarInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={e => { if (e.target.files?.[0]) handleAvatarChange(e.target.files[0]) }} />
                 </div>
               </div>
-              {[
-                { label: 'שם מלא', val: user.name, placeholder: 'שם מלא' },
-                { label: 'אימייל', val: user.email, placeholder: 'אימייל' },
-                { label: 'מיקום', val: user.location, placeholder: 'עיר / מדינה' },
-              ].map(f => (
-                <div key={f.label}>
-                  <label className="block text-xs text-text-secondary mb-1.5">{f.label}</label>
-                  <input defaultValue={f.val} placeholder={f.placeholder}
-                    className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple transition-colors" />
-                </div>
-              ))}
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">שם מלא</label>
+                <input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="שם מלא"
+                  className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">אימייל</label>
+                <input defaultValue={user.email} placeholder="אימייל" disabled
+                  className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm opacity-60 cursor-not-allowed" />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">מיקום</label>
+                <input value={locationText} onChange={e => setLocationText(e.target.value)} placeholder="עיר / מדינה"
+                  className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple transition-colors" />
+              </div>
               <div>
                 <label className="block text-xs text-text-secondary mb-1.5">ביוגרפיה</label>
-                <textarea defaultValue={user.bio} rows={3}
+                <textarea value={bioText} onChange={e => setBioText(e.target.value)} rows={3}
                   className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-purple transition-colors" />
               </div>
-              <button onClick={() => showToast('פרטים עודכנו!', 'success')}
-                className="px-6 py-2.5 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-glow-sm">
+              <button onClick={saveProfile} disabled={savingProfile}
+                className="flex items-center gap-2 px-6 py-2.5 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-glow-sm disabled:opacity-60">
+                {savingProfile ? <Loader2 size={14} className="animate-spin" /> : null}
                 שמור שינויים
               </button>
             </div>
