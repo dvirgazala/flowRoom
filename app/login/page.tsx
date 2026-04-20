@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { signIn, getMyProfile } from '@/lib/db'
+import { signIn } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
 import { Music2, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
@@ -19,14 +20,22 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      const { error } = await signIn(email, password)
+      const { data, error } = await signIn(email, password)
       if (error) {
         showToast(error.message || 'אימייל או סיסמה שגויים', 'error')
         setLoading(false)
         return
       }
-      // Admin redirect: if profile has is_admin flag, go to admin dashboard
-      const profile = await getMyProfile()
+      // Query profile directly using the user ID from signIn result
+      const userId = data?.user?.id
+      if (!userId) { router.push('/feed'); return }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', userId)
+        .single()
+
       if (profile?.is_admin) {
         sessionStorage.setItem('admin-auth', '1')
         router.push('/admin/dashboard')
