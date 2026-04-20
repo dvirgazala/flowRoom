@@ -6,7 +6,7 @@ import { useStore } from '@/lib/store'
 import { signIn } from '@/lib/db'
 import { Music2, Eye, EyeOff } from 'lucide-react'
 
-const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? ''
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? 'dvirgazala13579@gmail.com'
 
 export default function LoginPage() {
   const router    = useRouter()
