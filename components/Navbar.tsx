@@ -3,8 +3,8 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { USERS } from '@/lib/data'
-import { signOut, getMyNotifications, markAllNotificationsRead } from '@/lib/db'
-import type { NotificationWithFrom } from '@/lib/db'
+import { signOut, getMyNotifications, markAllNotificationsRead, getConversations } from '@/lib/db'
+import type { NotificationWithFrom, Conversation } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import { relativeTime } from '@/lib/profile-utils'
 import Avatar from './Avatar'
@@ -51,6 +51,8 @@ export default function Navbar() {
   const [chatListOpen, setChatListOpen] = useState(false)
   const [chatUserId, setChatUserId] = useState<string | null>(null)
   const [chatSearch, setChatSearch] = useState('')
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [dmUnread, setDmUnread] = useState(0)
   const [notifications, setNotifications] = useState<NotificationWithFrom[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const notifRef = useRef<HTMLDivElement>(null)
@@ -64,7 +66,15 @@ export default function Navbar() {
     setUnreadCount(items.filter(n => !n.read).length)
   }, [currentUser])
 
+  const loadConversations = useCallback(async () => {
+    if (!hasSupabase || !currentUser) return
+    const convos = await getConversations()
+    setConversations(convos)
+    setDmUnread(convos.reduce((acc, c) => acc + c.unreadCount, 0))
+  }, [currentUser])
+
   useEffect(() => { loadNotifications() }, [loadNotifications])
+  useEffect(() => { loadConversations() }, [loadConversations])
 
   // Realtime: new notifications
   useEffect(() => {
@@ -139,11 +149,17 @@ export default function Navbar() {
         {/* Messages */}
         {currentUser && (
           <div className="relative" ref={chatRef}>
-            <button onClick={() => { setChatListOpen(!chatListOpen); setNotifOpen(false); setMenuOpen(false) }}
+            <button onClick={() => { setChatListOpen(!chatListOpen); setNotifOpen(false); setMenuOpen(false); if (!chatListOpen) loadConversations() }}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-bg3 hover:bg-bg2 transition-colors relative"
               aria-label="הודעות">
               <MessageCircle size={16} className="text-text-secondary" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple rounded-full" />
+              {dmUnread > 0 ? (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 bg-purple rounded-full text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {dmUnread > 9 ? '9+' : dmUnread}
+                </span>
+              ) : (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple rounded-full" />
+              )}
             </button>
             {chatListOpen && (
               <div className="absolute left-0 top-12 w-80 max-w-[calc(100vw-2rem)] bg-bg2 rounded-xl overflow-hidden z-50 fade-in" style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 8px 40px rgba(0,0,0,0.8)' }}>
@@ -160,9 +176,40 @@ export default function Navbar() {
                   />
                 </div>
                 <div className="max-h-80 overflow-y-auto">
+                  {/* Recent conversations (when no search) */}
+                  {!chatSearch.trim() && conversations.length > 0 && (() => {
+                    const convoUsers = conversations
+                      .map(c => ({ convo: c, user: USERS.find(u => u.id === c.userId) }))
+                      .filter(x => x.user && x.user.id !== currentUser.id)
+                    if (convoUsers.length === 0) return null
+                    return (
+                      <>
+                        <p className="text-[10px] text-text-muted px-4 pt-1 pb-0.5 uppercase tracking-wide">שיחות אחרונות</p>
+                        {convoUsers.map(({ convo, user: u }) => u && (
+                          <button key={u.id}
+                            onClick={() => { setChatUserId(u.id); setChatListOpen(false); setChatSearch(''); loadConversations() }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-bg3 transition-colors text-right">
+                            <Avatar user={u} size="sm" showOnline />
+                            <div className="flex-1 min-w-0 text-right">
+                              <div className="flex items-center gap-1 justify-between">
+                                <p className="text-sm font-medium text-text-primary truncate">{u.name}</p>
+                                {convo.unreadCount > 0 && (
+                                  <span className="flex-shrink-0 min-w-[18px] h-4.5 px-1 bg-purple rounded-full text-white text-[10px] font-bold flex items-center justify-center">{convo.unreadCount}</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-text-muted truncate">{convo.lastMessage}</p>
+                            </div>
+                          </button>
+                        ))}
+                        <p className="text-[10px] text-text-muted px-4 pt-2 pb-0.5 uppercase tracking-wide border-t border-border mt-1">כל המשתמשים</p>
+                      </>
+                    )
+                  })()}
+                  {/* All users (filtered by search) */}
                   {USERS
                     .filter(u => u.id !== currentUser.id && (!chatSearch.trim() || u.name.includes(chatSearch.trim())))
-                    .slice(0, 20)
+                    .filter(u => chatSearch.trim() || !conversations.some(c => c.userId === u.id))
+                    .slice(0, 15)
                     .map(u => (
                       <button
                         key={u.id}

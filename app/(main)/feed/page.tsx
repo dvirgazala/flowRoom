@@ -183,6 +183,30 @@ export default function FeedPage() {
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({})
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
 
+  // Realtime: new comments appear live
+  useEffect(() => {
+    if (!hasSupabase) return
+    const channel = supabase.channel('comments-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, async ({ new: row }) => {
+        const { data } = await supabase
+          .from('comments')
+          .select('*, author:profiles!comments_user_id_fkey(*)')
+          .eq('id', (row as { id: string }).id)
+          .single()
+        if (!data) return
+        const c = data as unknown as CommentWithAuthor
+        if (c.author) setAuthorCache(prev => ({ ...prev, [c.user_id]: profileToUser(c.author) }))
+        const newComment = dbCommentToFeed(c)
+        setCommentsMap(prev => {
+          const existing = prev[c.post_id] || []
+          if (existing.some(e => e.id === c.id)) return prev
+          return { ...prev, [c.post_id]: [...existing, newComment] }
+        })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
   // Upload progress
   const [uploading, setUploading] = useState(false)
 

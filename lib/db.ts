@@ -367,6 +367,40 @@ export async function markAllNotificationsRead() {
 }
 
 // ============================================================
+// DM CONVERSATIONS
+// ============================================================
+export interface Conversation {
+  userId: string
+  lastMessage: string
+  lastAt: string
+  unreadCount: number
+}
+
+export async function getConversations(): Promise<Conversation[]> {
+  const session = await getSession()
+  if (!session) return []
+  const me = session.user.id
+  const { data } = await supabase
+    .from('direct_messages')
+    .select('*')
+    .or(`from_user_id.eq.${me},to_user_id.eq.${me}`)
+    .order('created_at', { ascending: false })
+  if (!data) return []
+  const seen = new Set<string>()
+  const convos: Conversation[] = []
+  for (const msg of data) {
+    const otherId = msg.from_user_id === me ? msg.to_user_id : msg.from_user_id
+    if (seen.has(otherId)) continue
+    seen.add(otherId)
+    const unreadCount = data.filter(
+      (m: typeof msg) => m.from_user_id === otherId && m.to_user_id === me && !m.read
+    ).length
+    convos.push({ userId: otherId, lastMessage: msg.text, lastAt: msg.created_at, unreadCount })
+  }
+  return convos
+}
+
+// ============================================================
 // STORAGE
 // ============================================================
 export async function uploadFile(file: File, bucket: 'post-media' | 'avatars'): Promise<string | null> {

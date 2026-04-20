@@ -4,22 +4,30 @@ import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { USERS, getUserById } from '@/lib/data'
 import * as db from '@/lib/db'
+import type { PostWithAuthor } from '@/lib/db'
+import { relativeTime } from '@/lib/profile-utils'
 import Avatar from '@/components/Avatar'
 import AudioPlayer from '@/components/AudioPlayer'
 import VerifiedBadge from '@/components/VerifiedBadge'
 import DmChatModal from '@/components/DmChatModal'
 import type { MediaItem } from '@/lib/types'
+
+const hasSupabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 import {
   MapPin, Music2, Star, Users, MessageCircle, Share2, Zap, Trophy, Clock, Play,
   Image as ImageIcon, Video, Film, Heart, Eye, Upload, X, Plus,
-  ChevronLeft, ChevronRight, Download, MoreHorizontal, UserCheck, UserPlus, Loader2,
+  ChevronLeft, ChevronRight, Download, MoreHorizontal, UserCheck, UserPlus, Loader2, FileText,
 } from 'lucide-react'
 
 export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { currentUser, showToast, users } = useStore()
   const user = users.find(u => u.id === id) || getUserById(id) || USERS[0]
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'media' | 'collabs' | 'about'>('portfolio')
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'media' | 'collabs' | 'about' | 'posts'>('portfolio')
+
+  // Real posts from DB
+  const [profilePosts, setProfilePosts] = useState<PostWithAuthor[] | null>(null)
+  const [loadingPosts, setLoadingPosts] = useState(false)
   const [dmOpen, setDmOpen] = useState(false)
   const tabsRef = useRef<HTMLDivElement>(null)
 
@@ -41,6 +49,13 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
     if (isMe || !currentUser) { setFollowing(false); return }
     db.isFollowing(id).then(setFollowing)
   }, [id, isMe, currentUser])
+
+  // Load posts when posts tab is opened
+  useEffect(() => {
+    if (activeTab !== 'posts' || profilePosts !== null || !hasSupabase) return
+    setLoadingPosts(true)
+    db.getPostsByUser(id).then(rows => { setProfilePosts(rows); setLoadingPosts(false) }).catch(() => setLoadingPosts(false))
+  }, [activeTab, id, profilePosts])
 
   const handleFollow = async () => {
     if (!currentUser || followLoading) return
@@ -231,11 +246,12 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
       {/* Tabs */}
       <div ref={tabsRef} className="flex gap-1 bg-bg1 rounded-2xl shadow-surface p-1 mb-6 overflow-x-auto">
         {([
+          ['posts', 'פוסטים'],
           ['portfolio', 'תיק עבודות'],
           ['media', `מדיה ${mediaItems.length > 0 ? `(${mediaItems.length})` : ''}`],
           ['collabs', 'שיתופי פעולה'],
           ['about', 'אודות'],
-        ] as const).map(([tab, label]) => (
+        ] as [typeof activeTab, string][]).map(([tab, label]) => (
           <button key={tab} onClick={() => handleTabChange(tab)}
             className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-medium transition-all whitespace-nowrap
               ${activeTab === tab ? 'bg-brand-gradient text-white shadow-glow-sm' : 'text-text-muted hover:text-text-secondary'}`}>
@@ -243,6 +259,49 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
           </button>
         ))}
       </div>
+
+      {/* ── Posts ─────────────────────────────────────────────────────────────── */}
+      {activeTab === 'posts' && (
+        <div className="space-y-3">
+          {loadingPosts && (
+            <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-purple" /></div>
+          )}
+          {!loadingPosts && (profilePosts ?? []).length === 0 && (
+            <div className="bg-bg1 rounded-2xl shadow-surface p-8 text-center">
+              <MessageCircle size={32} className="text-text-muted mx-auto mb-2" />
+              <p className="text-text-muted text-sm">אין פוסטים עדיין</p>
+            </div>
+          )}
+          {(profilePosts ?? []).map(post => (
+            <div key={post.id} className="bg-bg1 rounded-2xl shadow-surface p-4 hover:shadow-glow-sm transition-all">
+              <p className="text-sm text-text-primary leading-relaxed whitespace-pre-line mb-3">
+                {post.content.split(/(\s+)/).map((word, i) =>
+                  word.startsWith('#')
+                    ? <span key={i} className="text-purple">{word}</span>
+                    : <span key={i}>{word}</span>
+                )}
+              </p>
+              {post.media_urls?.length > 0 && (
+                <div className={`mb-3 rounded-xl overflow-hidden ${post.media_urls.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''}`}>
+                  {post.media_urls.map((url, i) => (
+                    <img key={i} src={url} alt="" className="w-full object-cover max-h-80" />
+                  ))}
+                </div>
+              )}
+              {post.audio_url && <AudioPlayer url={post.audio_url} compact />}
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/40">
+                <span className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <Heart size={13} /> {post.likes_count}
+                </span>
+                <span className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <MessageCircle size={13} /> {post.comments_count}
+                </span>
+                <span className="text-xs text-text-muted mr-auto">{relativeTime(post.created_at)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Portfolio ──────────────────────────────────────────────────────────── */}
       {activeTab === 'portfolio' && (
