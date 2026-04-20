@@ -14,7 +14,7 @@ import {
   LogOut, Music2, Activity, BarChart3, Search, ChevronDown, ChevronUp,
   Eye, Crown, Clock, RefreshCw, Loader2, FileText, Home, Mic2,
   MessageSquare, TrendingUp, UserCheck, UserX, Image, Zap,
-  Edit2, Check, X, ExternalLink, Filter, Shield,
+  Edit2, Check, X, ExternalLink, Filter, Shield, KeyRound,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -165,6 +165,26 @@ export default function AdminDashboard() {
     showToast(log, 'success')
     setActionLoading(null)
     setConfirmModal(null)
+  }
+
+  const resetUserPassword = async (userId: string, email: string, name: string) => {
+    setActionLoading(userId + 'reset')
+    try {
+      const res = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      if (res.ok) {
+        addAdminLog(`שלח מייל איפוס סיסמה ל: ${name}`, name)
+        showToast(`מייל איפוס סיסמה נשלח ל-${email}`, 'success')
+      } else {
+        showToast('שגיאה בשליחת מייל האיפוס', 'error')
+      }
+    } catch {
+      showToast('שגיאה בשליחת מייל האיפוס', 'error')
+    }
+    setActionLoading(null)
   }
 
   const saveUserEdit = async (userId: string) => {
@@ -496,6 +516,11 @@ export default function AdminDashboard() {
                                     <button onClick={() => { setEditingUser(u.id); setEditName(u.display_name); setEditRole(u.role); setEditBio(u.bio || ''); setExpandedUser(u.id) }}
                                       title="ערוך" className="p-1.5 bg-info/10 hover:bg-info/25 rounded-lg text-info transition-colors">
                                       <Edit2 size={12} />
+                                    </button>
+                                    <button onClick={() => resetUserPassword(u.id, u.username, u.display_name)}
+                                      disabled={actionLoading === u.id + 'reset'}
+                                      title="אפס סיסמה (שלח מייל)" className="p-1.5 bg-warning/10 hover:bg-warning/25 rounded-lg text-warning transition-colors disabled:opacity-40">
+                                      {actionLoading === u.id + 'reset' ? <Loader2 size={12} className="animate-spin" /> : <KeyRound size={12} />}
                                     </button>
                                     <button onClick={() => setConfirmModal({ type: 'delete-user', id: u.id, name: u.display_name })}
                                       title="מחק" className="p-1.5 bg-danger/10 hover:bg-danger/25 rounded-lg text-danger transition-colors disabled:opacity-40">
