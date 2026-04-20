@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import Toast from '@/components/Toast'
 import ThemeApplier from '@/components/ThemeApplier'
+import SupabaseProvider from '@/components/SupabaseProvider'
 
 export const metadata: Metadata = {
   title: 'FlowRoom — הבית של יוצרי המוזיקה',
@@ -30,7 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen">
         <ThemeApplier />
-        {children}
+        <SupabaseProvider>
+          {children}
+        </SupabaseProvider>
         <Toast />
       </body>
     </html>
