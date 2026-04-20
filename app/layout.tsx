@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import Toast from '@/components/Toast'
+import ThemeApplier from '@/components/ThemeApplier'
 
 export const metadata: Metadata = {
   title: 'FlowRoom — הבית של יוצרי המוזיקה',
@@ -26,7 +28,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        <ThemeApplier />
+        {children}
+        <Toast />
+      </body>
     </html>
   )
 }
