@@ -4,8 +4,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
 import { signIn } from '@/lib/db'
-import { supabase } from '@/lib/supabase'
 import { Music2, Eye, EyeOff } from 'lucide-react'
+
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? ''
 
 export default function LoginPage() {
   const router    = useRouter()
@@ -26,17 +27,9 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
-      // Query profile directly using the user ID from signIn result
-      const userId = data?.user?.id
-      if (!userId) { router.push('/feed'); return }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single()
-
-      if (profile?.is_admin) {
+      // Admin check: compare email directly — no extra DB round-trip
+      const userEmail = data?.user?.email ?? ''
+      if (ADMIN_EMAIL && userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         sessionStorage.setItem('admin-auth', '1')
         router.push('/admin/dashboard')
       } else {
