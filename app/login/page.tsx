@@ -23,7 +23,7 @@ export default function LoginPage() {
     try {
       const { data, error } = await signIn(email, password)
       if (error) {
-        showToast(error.message || 'אימייל או סיסמה שגויים', 'error')
+        showToast('שם המשתמש או הסיסמה אינם נכונים', 'error')
         setLoading(false)
         return
       }
