@@ -367,6 +367,59 @@ export async function markAllNotificationsRead() {
 }
 
 // ============================================================
+// ADMIN
+// ============================================================
+export async function adminGetStats() {
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const [users, posts, postsToday, rooms, online, newUsers] = await Promise.all([
+    supabase.from('profiles').select('*', { count: 'exact', head: true }),
+    supabase.from('posts').select('*', { count: 'exact', head: true }),
+    supabase.from('posts').select('*', { count: 'exact', head: true }).gte('created_at', todayStart.toISOString()),
+    supabase.from('rooms').select('*', { count: 'exact', head: true }).eq('is_active', true),
+    supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_online', true),
+    supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', weekAgo),
+  ])
+  return {
+    totalUsers: users.count ?? 0,
+    totalPosts: posts.count ?? 0,
+    postsToday: postsToday.count ?? 0,
+    activeRooms: rooms.count ?? 0,
+    onlineUsers: online.count ?? 0,
+    newUsersWeek: newUsers.count ?? 0,
+  }
+}
+
+export async function adminGetAllPosts(limit = 100): Promise<PostWithAuthor[]> {
+  const { data } = await supabase
+    .from('posts')
+    .select('*, author:profiles!posts_user_id_fkey(*)')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  return ((data ?? []) as unknown) as PostWithAuthor[]
+}
+
+export async function adminUpdateProfile(id: string, patch: Partial<DbProfile>) {
+  return supabase.from('profiles').update(patch).eq('id', id)
+}
+
+export async function adminDeleteProfile(id: string) {
+  return supabase.from('profiles').delete().eq('id', id)
+}
+
+export async function adminGetAllRooms() {
+  const { data } = await supabase
+    .from('rooms')
+    .select('*')
+    .order('created_at', { ascending: false })
+  return (data ?? []) as DbRoom[]
+}
+
+export async function adminDeleteRoom(id: string) {
+  return supabase.from('rooms').delete().eq('id', id)
+}
+
+// ============================================================
 // DM CONVERSATIONS
 // ============================================================
 export interface Conversation {

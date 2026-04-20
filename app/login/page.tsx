@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { signIn } from '@/lib/db'
+import { signIn, getMyProfile } from '@/lib/db'
 import { Music2, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
@@ -25,7 +25,14 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.push('/feed')
+    // Admin redirect: if profile has is_admin flag, go to admin dashboard
+    const profile = await getMyProfile()
+    if (profile?.is_admin) {
+      sessionStorage.setItem('admin-auth', '1')
+      router.push('/admin/dashboard')
+    } else {
+      router.push('/feed')
+    }
   }
 
   return (
