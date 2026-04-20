@@ -18,20 +18,24 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-
-    const { error } = await signIn(email, password)
-    if (error) {
-      showToast(error.message || 'אימייל או סיסמה שגויים', 'error')
+    try {
+      const { error } = await signIn(email, password)
+      if (error) {
+        showToast(error.message || 'אימייל או סיסמה שגויים', 'error')
+        setLoading(false)
+        return
+      }
+      // Admin redirect: if profile has is_admin flag, go to admin dashboard
+      const profile = await getMyProfile()
+      if (profile?.is_admin) {
+        sessionStorage.setItem('admin-auth', '1')
+        router.push('/admin/dashboard')
+      } else {
+        router.push('/feed')
+      }
+    } catch {
+      showToast('שגיאה בהתחברות, נסה שוב', 'error')
       setLoading(false)
-      return
-    }
-    // Admin redirect: if profile has is_admin flag, go to admin dashboard
-    const profile = await getMyProfile()
-    if (profile?.is_admin) {
-      sessionStorage.setItem('admin-auth', '1')
-      router.push('/admin/dashboard')
-    } else {
-      router.push('/feed')
     }
   }
 

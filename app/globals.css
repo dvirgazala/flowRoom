@@ -10,6 +10,20 @@
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
 
+  /* Brand colors — defined here for Tailwind v4 (not relying on tailwind.config.ts) */
+  --color-purple: #a855f7;
+  --color-purple-light: #bd85fc;
+  --color-purple-dim: rgba(168,85,247,0.15);
+  --color-pink: #ec4899;
+  --color-success: #4ddb80;
+  --color-warning: #fcc928;
+  --color-danger: #f95a5a;
+  --color-info: #62a8fc;
+
+  /* Background images */
+  --background-image-brand-gradient: linear-gradient(135deg, #a855f7, #ec4899);
+  --background-image-brand-gradient-v: linear-gradient(180deg, #a855f7, #ec4899);
+
   --shadow-surface: var(--shadow-s);
   --shadow-surface-lg: var(--shadow-s-lg);
   --shadow-glow: 0 0 32px rgba(168,85,247,0.3);
@@ -195,6 +209,67 @@ html[data-theme="dark"] nav.fixed {
 html[data-theme="light"] body {
   background: var(--bg0);
   color: var(--text-primary);
+}
+
+/* ── Light theme: brand gradient buttons stay vibrant ─────────────────── */
+html[data-theme="light"] .bg-brand-gradient {
+  background-image: linear-gradient(135deg, #a855f7, #ec4899) !important;
+  background-color: transparent !important;
+}
+
+/* ── Light theme: secondary/ghost buttons — stronger contrast ──────────── */
+html[data-theme="light"] .bg-bg3 {
+  background-color: #e8e8f4 !important;
+}
+
+/* Secondary buttons: clearly visible border + readable text */
+html[data-theme="light"] .bg-bg3.border,
+html[data-theme="light"] .bg-bg3[class*="border"] {
+  border-color: #c0c0dc !important;
+}
+
+/* Ghost purple buttons: readable tint in light mode */
+html[data-theme="light"] [class*="bg-purple\/"] {
+  background-color: rgba(168,85,247,0.12) !important;
+}
+html[data-theme="light"] [class*="hover\:bg-purple\/"]:hover {
+  background-color: rgba(168,85,247,0.22) !important;
+}
+
+/* Text on bg-bg3 buttons: ensure dark enough */
+html[data-theme="light"] .text-text-secondary { color: #3a3a58 !important; }
+html[data-theme="light"] .text-text-muted     { color: #7070a0 !important; }
+
+/* Icon buttons (hover:bg-bg3) — visible hover in light */
+html[data-theme="light"] .hover\:bg-bg3:hover {
+  background-color: #dcdcf0 !important;
+}
+html[data-theme="light"] .hover\:bg-bg2:hover {
+  background-color: #eaeaf8 !important;
+}
+
+/* Tab / filter buttons: active state visible */
+html[data-theme="light"] [class*="bg-bg2\/"] {
+  background-color: rgba(234,234,248,0.8) !important;
+}
+
+/* Input fields: clear border in light */
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select {
+  border-color: #c8c8e4 !important;
+  background-color: #ededf8 !important;
+  color: #16162a !important;
+}
+html[data-theme="light"] input:focus,
+html[data-theme="light"] textarea:focus {
+  border-color: #a855f7 !important;
+  background-color: #f5f5ff !important;
+}
+
+/* Cancel / neutral buttons that sit next to gradient CTA */
+html[data-theme="light"] .border-border {
+  border-color: #c0c0dc !important;
 }
 
 /* Backgrounds */
