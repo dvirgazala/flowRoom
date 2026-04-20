@@ -420,6 +420,77 @@ export async function adminDeleteRoom(id: string) {
 }
 
 // ============================================================
+// STORIES
+// ============================================================
+import type { StoryWithAuthor } from './supabase-types'
+
+export async function getActiveStories(): Promise<StoryWithAuthor[]> {
+  const session = await getSession()
+  const myId = session?.user.id ?? null
+
+  const { data } = await supabase
+    .from('stories')
+    .select('*, author:profiles!stories_user_id_fkey(*)')
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+
+  if (!data) return []
+
+  // For each story check if viewed by me
+  const storyIds = data.map((s: Record<string, unknown>) => s.id as string)
+  let viewedIds = new Set<string>()
+  if (myId && storyIds.length) {
+    const { data: views } = await supabase
+      .from('story_views')
+      .select('story_id')
+      .eq('viewer_id', myId)
+      .in('story_id', storyIds)
+    viewedIds = new Set((views ?? []).map((v: Record<string, unknown>) => v.story_id as string))
+  }
+
+  // Count views per story
+  const { data: counts } = await supabase
+    .from('story_views')
+    .select('story_id')
+    .in('story_id', storyIds)
+  const countMap: Record<string, number> = {}
+  ;(counts ?? []).forEach((v: Record<string, unknown>) => {
+    const sid = v.story_id as string
+    countMap[sid] = (countMap[sid] ?? 0) + 1
+  })
+
+  return data.map((s: Record<string, unknown>) => ({
+    ...(s as unknown as StoryWithAuthor),
+    view_count: countMap[s.id as string] ?? 0,
+    viewed_by_me: viewedIds.has(s.id as string),
+  }))
+}
+
+export async function createStory(mediaUrl: string, textOverlay?: string): Promise<StoryWithAuthor | null> {
+  const session = await getSession()
+  if (!session) return null
+  const { data } = await supabase
+    .from('stories')
+    .insert({ user_id: session.user.id, media_url: mediaUrl, text_overlay: textOverlay ?? null })
+    .select('*, author:profiles!stories_user_id_fkey(*)')
+    .single()
+  if (!data) return null
+  return { ...(data as unknown as StoryWithAuthor), view_count: 0, viewed_by_me: false }
+}
+
+export async function markStoryViewed(storyId: string): Promise<void> {
+  const session = await getSession()
+  if (!session) return
+  await supabase
+    .from('story_views')
+    .upsert({ story_id: storyId, viewer_id: session.user.id }, { onConflict: 'story_id,viewer_id' })
+}
+
+export async function deleteStory(id: string): Promise<void> {
+  await supabase.from('stories').delete().eq('id', id)
+}
+
+// ============================================================
 // DM CONVERSATIONS
 // ============================================================
 export interface Conversation {

@@ -12,6 +12,9 @@ import Avatar from '@/components/Avatar'
 import AudioPlayer from '@/components/AudioPlayer'
 import VerifiedBadge from '@/components/VerifiedBadge'
 import ProfileHoverCard from '@/components/ProfileHoverCard'
+import StoryViewer, { type StoryGroup } from '@/components/StoryViewer'
+import StoryCreator from '@/components/StoryCreator'
+import type { StoryWithAuthor } from '@/lib/supabase-types'
 import {
   Heart, MessageCircle, Share2, Send, Zap, Users as UsersIcon,
   Paperclip, Hash, X, Image, Music, Smile, MapPin, Globe, Lock, Users2,
@@ -116,11 +119,23 @@ export default function FeedPage() {
   const [commentsMap, setCommentsMap] = useState<Record<string, FeedComment[]>>({})
   const [loadingPosts, setLoadingPosts] = useState(hasSupabase)
 
+  // Stories
+  const [stories, setStories] = useState<StoryWithAuthor[]>([])
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false)
+  const [storyViewerGroupIdx, setStoryViewerGroupIdx] = useState(0)
+  const [storyCreatorOpen, setStoryCreatorOpen] = useState(false)
+
   const posts = dbPosts ?? storePosts
 
   const findUser = useCallback((id: string): User | undefined => {
     return authorCache[id] || users.find(u => u.id === id) || getUserById(id)
   }, [authorCache, users])
+
+  // Load stories
+  useEffect(() => {
+    if (!hasSupabase) return
+    db.getActiveStories().then(setStories).catch(() => {})
+  }, [])
 
   // Initial load from DB
   useEffect(() => {
@@ -549,8 +564,42 @@ export default function FeedPage() {
     </>
   )
 
+  // Build story groups for viewer
+  const storyGroupMap: Record<string, StoryGroup> = {}
+  stories.forEach(s => {
+    if (!storyGroupMap[s.user_id]) {
+      const u = profileToUser(s.author)
+      storyGroupMap[s.user_id] = { userId: s.user_id, userName: u.name, userAvatar: u.avatarUrl, stories: [] }
+    }
+    storyGroupMap[s.user_id].stories.push(s)
+  })
+  const storyGroups: StoryGroup[] = Object.values(storyGroupMap).sort((a, b) => {
+    if (a.userId === user.id) return -1
+    if (b.userId === user.id) return 1
+    return a.stories.some(s => !s.viewed_by_me) ? -1 : 1
+  })
+
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-6 flex gap-6">
+
+      {/* Story Viewer */}
+      {storyViewerOpen && storyGroups.length > 0 && (
+        <StoryViewer
+          groups={storyGroups}
+          startGroupIndex={Math.min(storyViewerGroupIdx, storyGroups.length - 1)}
+          myUserId={user.id}
+          onClose={() => setStoryViewerOpen(false)}
+          onStoryDeleted={id => setStories(prev => prev.filter(s => s.id !== id))}
+        />
+      )}
+
+      {/* Story Creator */}
+      {storyCreatorOpen && (
+        <StoryCreator
+          onClose={() => setStoryCreatorOpen(false)}
+          onCreated={story => setStories(prev => [story, ...prev])}
+        />
+      )}
 
       {/* Delete confirmation */}
       {confirmDeleteId && (
@@ -664,40 +713,89 @@ export default function FeedPage() {
       <div className="flex-1 min-w-0 space-y-3">
 
         {/* ── Stories bar ───────────────────────────────────────────────── */}
-        <div className="bg-bg1 rounded-2xl shadow-surface">
-          <div className="flex gap-4 px-4 py-3 overflow-x-auto no-scrollbar">
-            {/* My story */}
-            <button
-              onClick={() => showToast('פונקציית סטורי בקרוב!', 'info')}
-              className="flex flex-col items-center gap-1.5 flex-shrink-0 active:scale-90 transition-transform"
-            >
-              <div className="relative">
-                <div className="w-14 h-14 rounded-full ring-2 ring-dashed ring-purple/40 overflow-hidden">
-                  <Avatar user={user} size="lg" />
-                </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-brand-gradient rounded-full flex items-center justify-center border-2 border-bg1">
-                  <Plus size={10} className="text-white" />
-                </div>
-              </div>
-              <span className="text-[10px] text-text-muted w-14 text-center leading-tight">הסטורי שלי</span>
-            </button>
+        {(() => {
+          // Build groups: one group per user, sorted so unseen first
+          const groupMap: Record<string, StoryGroup> = {}
+          stories.forEach(s => {
+            if (!groupMap[s.user_id]) {
+              const u = profileToUser(s.author)
+              groupMap[s.user_id] = { userId: s.user_id, userName: u.name, userAvatar: u.avatarUrl, stories: [] }
+            }
+            groupMap[s.user_id].stories.push(s)
+          })
+          // Put my stories first, then unseen, then seen
+          const allGroups: StoryGroup[] = Object.values(groupMap).sort((a, b) => {
+            if (a.userId === user.id) return -1
+            if (b.userId === user.id) return 1
+            const aUnseen = a.stories.some(s => !s.viewed_by_me)
+            const bUnseen = b.stories.some(s => !s.viewed_by_me)
+            return aUnseen === bUnseen ? 0 : aUnseen ? -1 : 1
+          })
+          const myGroup = allGroups.find(g => g.userId === user.id)
+          const otherGroups = allGroups.filter(g => g.userId !== user.id)
 
-            {USERS.filter(u => u.id !== user.id).slice(0, 10).map((su, i) => (
-              <button
-                key={su.id}
-                onClick={() => showToast(`הסטורי של ${su.name.split(' ')[0]}`, 'info')}
-                className="flex flex-col items-center gap-1.5 flex-shrink-0 active:scale-90 transition-transform"
-              >
-                <div className={`w-14 h-14 rounded-full p-[2.5px] ${i < 7 ? 'bg-brand-gradient' : 'bg-bg3'}`}>
-                  <div className="w-full h-full rounded-full bg-bg1 p-[2px] overflow-hidden">
-                    <Avatar user={su} size="lg" />
+          return (
+            <div className="bg-bg1 rounded-2xl shadow-surface">
+              <div className="flex gap-4 px-4 py-3 overflow-x-auto no-scrollbar">
+                {/* My story button */}
+                <button
+                  onClick={() => {
+                    if (myGroup) {
+                      setStoryViewerGroupIdx(allGroups.indexOf(myGroup))
+                      setStoryViewerOpen(true)
+                    } else {
+                      setStoryCreatorOpen(true)
+                    }
+                  }}
+                  className="flex flex-col items-center gap-1.5 flex-shrink-0 active:scale-90 transition-transform"
+                >
+                  <div className="relative">
+                    <div className={`w-14 h-14 rounded-full p-[2.5px] ${myGroup ? 'bg-brand-gradient' : 'ring-2 ring-dashed ring-purple/40'}`}>
+                      <div className="w-full h-full rounded-full bg-bg1 p-[2px] overflow-hidden">
+                        <Avatar user={user} size="lg" />
+                      </div>
+                    </div>
+                    {!myGroup && (
+                      <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-brand-gradient rounded-full flex items-center justify-center border-2 border-bg1">
+                        <Plus size={10} className="text-white" />
+                      </div>
+                    )}
                   </div>
-                </div>
-                <span className="text-[10px] text-text-muted w-14 text-center truncate leading-tight">{su.name.split(' ')[0]}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+                  <span className="text-[10px] text-text-muted w-14 text-center leading-tight">
+                    {myGroup ? 'הסטורי שלי' : 'הוסף סטורי'}
+                  </span>
+                </button>
+
+                {/* Other users' stories */}
+                {otherGroups.map(g => {
+                  const allSeen = g.stories.every(s => s.viewed_by_me)
+                  const groupIdxInAll = allGroups.indexOf(g)
+                  return (
+                    <button key={g.userId}
+                      onClick={() => { setStoryViewerGroupIdx(groupIdxInAll); setStoryViewerOpen(true) }}
+                      className="flex flex-col items-center gap-1.5 flex-shrink-0 active:scale-90 transition-transform"
+                    >
+                      <div className={`w-14 h-14 rounded-full p-[2.5px] ${allSeen ? 'bg-bg3' : 'bg-brand-gradient'}`}>
+                        <div className="w-full h-full rounded-full bg-bg1 p-[2px] overflow-hidden">
+                          {g.userAvatar
+                            ? <img src={g.userAvatar} alt="" className="w-full h-full object-cover rounded-full" />
+                            : <div className="w-full h-full rounded-full bg-purple/20 flex items-center justify-center text-purple text-lg font-bold">{g.userName[0]}</div>
+                          }
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-text-muted w-14 text-center truncate leading-tight">{g.userName.split(' ')[0]}</span>
+                    </button>
+                  )
+                })}
+
+                {/* Fallback: no stories yet */}
+                {stories.length === 0 && (
+                  <div className="flex items-center text-text-muted text-xs pr-2">אין סטורי כרגע</div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── Mobile compact compose trigger ────────────────────────────── */}
         <div

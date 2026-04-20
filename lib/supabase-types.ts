@@ -126,6 +126,21 @@ export interface DbNotification {
   created_at: string
 }
 
+export interface DbStory {
+  id: string
+  user_id: string
+  media_url: string
+  text_overlay: string | null
+  created_at: string
+  expires_at: string
+}
+
+export interface StoryWithAuthor extends DbStory {
+  author: DbProfile
+  view_count: number
+  viewed_by_me: boolean
+}
+
 export interface DbProduct {
   id: string
   seller_id: string
