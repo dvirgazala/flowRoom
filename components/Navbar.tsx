@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { USERS } from '@/lib/data'
-import { signOut, getMyNotifications, markAllNotificationsRead, getConversations } from '@/lib/db'
+import { signOut, getMyNotifications, markAllNotificationsRead, getConversations, acceptRoomInvite, declineRoomInvite } from '@/lib/db'
 import type { NotificationWithFrom, Conversation } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import { relativeTime } from '@/lib/profile-utils'
@@ -271,11 +271,33 @@ export default function Navbar() {
                 {notifications.length === 0 ? (
                   <div className="px-4 py-8 text-center text-text-muted text-sm">אין התראות חדשות</div>
                 ) : notifications.map(n => (
-                  <div key={n.id} className={`px-4 py-3 hover:bg-bg3 cursor-pointer transition-colors flex items-start gap-3 border-b border-border/50 last:border-0 ${!n.read ? 'bg-purple/5' : ''}`}>
+                  <div key={n.id} className={`px-4 py-3 transition-colors flex items-start gap-3 border-b border-border/50 last:border-0 ${!n.read ? 'bg-purple/5' : ''}`}>
                     <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${NOTIF_DOT[n.type] ?? 'bg-text-muted'}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-text-primary">{notifText(n)}</p>
                       <p className="text-xs text-text-muted mt-0.5">{relativeTime(n.created_at)}</p>
+                      {n.type === 'room_invite' && n.room_id && !n.read && (
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={async () => {
+                              await acceptRoomInvite(n.id, n.room_id!)
+                              setNotifications(prev => prev.filter(x => x.id !== n.id))
+                              showToast('הצטרפת לחדר!', 'success')
+                              router.push(`/rooms/${n.room_id}`)
+                            }}
+                            className="px-3 py-1 bg-brand-gradient rounded-lg text-xs font-semibold text-white hover:opacity-90 transition-opacity">
+                            קבל
+                          </button>
+                          <button
+                            onClick={async () => {
+                              await declineRoomInvite(n.id)
+                              setNotifications(prev => prev.filter(x => x.id !== n.id))
+                            }}
+                            className="px-3 py-1 bg-bg3 border border-border rounded-lg text-xs text-text-secondary hover:text-text-primary transition-colors">
+                            דחה
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

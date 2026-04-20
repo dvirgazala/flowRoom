@@ -14,7 +14,7 @@ import type { DbRoom, DbRoomMember, DbProfile, DbRoomMessage, DbRoomStem, DbRoom
 import {
   ArrowLeft, CheckSquare, Square, Upload, Music2,
   MessageCircle, Send, Users, FileMusic, Zap, ChevronRight,
-  Loader2, Trash2,
+  Loader2, Trash2, UserPlus, X, Search,
 } from 'lucide-react'
 
 type Member = DbRoomMember & { profile: DbProfile }
@@ -41,8 +41,13 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const [activeTab, setActiveTab] = useState<'chat' | 'files' | 'tasks'>('chat')
   const [chatText, setChatText] = useState('')
   const [sending,  setSending]  = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [uploading,  setUploading]  = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteQ,    setInviteQ]    = useState('')
+  const [inviteRes,  setInviteRes]  = useState<DbProfile[]>([])
+  const [inviting,   setInviting]   = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -126,6 +131,32 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done } : t))
   }
 
+  const handleInviteSearch = (q: string) => {
+    setInviteQ(q)
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (!q.trim()) { setInviteRes([]); return }
+    searchTimer.current = setTimeout(async () => {
+      const results = await db.searchProfiles(q.trim(), 8)
+      const memberIds = new Set(members.map(m => m.user_id))
+      setInviteRes(results.filter(p => !memberIds.has(p.id)))
+    }, 300)
+  }
+
+  const handleInvite = async (profile: DbProfile) => {
+    if (!room) return
+    setInviting(profile.id)
+    const { error } = await db.inviteToRoom(room.id, profile.id)
+    setInviting(null)
+    if (error?.message === 'already member') {
+      showToast(`${profile.display_name} כבר חבר בחדר`, 'error')
+    } else if (error) {
+      showToast('שגיאה בשליחת ההזמנה', 'error')
+    } else {
+      showToast(`הזמנה נשלחה ל-${profile.display_name}`, 'success')
+      setInviteRes(prev => prev.filter(p => p.id !== profile.id))
+    }
+  }
+
   const handleAdvanceStage = async () => {
     if (!room) return
     await db.advanceRoomStage(id, room.current_stage)
@@ -144,12 +175,57 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   if (!room) return null
 
   const stage = STAGES[room.current_stage] ?? STAGES[0]
+
+  const InviteModal = showInvite ? (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={() => { setShowInvite(false); setInviteQ(''); setInviteRes([]) }}>
+      <div className="bg-bg1 rounded-2xl p-6 w-full max-w-sm shadow-surface-lg"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-bold text-base">הזמן שותף לחדר</h2>
+          <button onClick={() => { setShowInvite(false); setInviteQ(''); setInviteRes([]) }}
+            className="p-1.5 rounded-full hover:bg-bg3 text-text-muted transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="relative mb-3">
+          <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            autoFocus
+            value={inviteQ}
+            onChange={e => handleInviteSearch(e.target.value)}
+            placeholder="חפש לפי שם משתמש..."
+            className="w-full bg-bg3 border border-border rounded-xl pr-9 pl-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple"
+          />
+        </div>
+        <div className="space-y-1 max-h-64 overflow-y-auto">
+          {inviteRes.length === 0 && inviteQ.trim() && (
+            <p className="text-text-muted text-xs text-center py-4">לא נמצאו משתמשים</p>
+          )}
+          {inviteRes.map(profile => (
+            <div key={profile.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-bg3 transition-colors">
+              <Avatar user={profileToUser(profile)} size="sm" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{profile.display_name}</p>
+                <p className="text-xs text-text-muted">@{profile.username}</p>
+              </div>
+              <button onClick={() => handleInvite(profile)} disabled={inviting === profile.id}
+                className="flex-shrink-0 px-3 py-1.5 bg-brand-gradient rounded-lg text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-opacity">
+                {inviting === profile.id ? <Loader2 size={11} className="animate-spin" /> : 'הזמן'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  ) : null
   const currentTasks = tasks.filter(t => t.stage === room.current_stage)
   const doneTasks = currentTasks.filter(t => t.done).length
   const isCreator = room.created_by === currentUser?.id
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
+      {InviteModal}
       {/* Back */}
       <Link href="/rooms" className="inline-flex items-center gap-1.5 text-text-muted hover:text-text-primary text-sm mb-6 transition-colors">
         <ArrowLeft size={16} />חזרה לחדרים
@@ -165,6 +241,10 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
               <span className="inline-block text-xs text-purple mt-1.5 bg-purple/10 px-2.5 py-1 rounded-lg">{room.genre}</span>
             )}
           </div>
+          <button onClick={() => setShowInvite(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-bg3 border border-border rounded-xl text-sm text-text-secondary hover:text-purple hover:border-purple/40 transition-all">
+            <UserPlus size={15} />הזמן
+          </button>
           <Link href={`/rooms/${id}/flow`}
             className="px-4 py-2 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-glow-sm">
             ניהול Flow

@@ -394,6 +394,35 @@ export async function markAllNotificationsRead() {
   return supabase.from('notifications').update({ read: true }).eq('user_id', session.user.id).eq('read', false)
 }
 
+export async function markNotificationRead(notifId: string) {
+  return supabase.from('notifications').update({ read: true }).eq('id', notifId)
+}
+
+export async function inviteToRoom(roomId: string, userId: string) {
+  const session = await getSession()
+  if (!session) return { error: new Error('not logged in') }
+  const { data: existing } = await supabase
+    .from('room_members').select('user_id').match({ room_id: roomId, user_id: userId }).single()
+  if (existing) return { error: new Error('already member') }
+  const { error } = await supabase.from('notifications').insert({
+    user_id: userId,
+    from_user_id: session.user.id,
+    type: 'room_invite',
+    room_id: roomId,
+    message: 'הזמינך לחדר',
+  })
+  return { error }
+}
+
+export async function acceptRoomInvite(notifId: string, roomId: string) {
+  await joinRoom(roomId)
+  return supabase.from('notifications').update({ read: true }).eq('id', notifId)
+}
+
+export async function declineRoomInvite(notifId: string) {
+  return supabase.from('notifications').update({ read: true }).eq('id', notifId)
+}
+
 // ============================================================
 // ADMIN
 // ============================================================
