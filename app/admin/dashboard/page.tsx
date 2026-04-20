@@ -273,11 +273,11 @@ export default function AdminDashboard() {
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
             רענן
           </button>
-          <Link href="/feed" target="_blank"
+          <a href="/feed" target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-purple/10 border border-purple/30 rounded-xl text-xs text-purple hover:bg-purple/20 transition-colors">
             <ExternalLink size={12} />
             צפה בפלטפורמה
-          </Link>
+          </a>
           <button onClick={handleLogout}
             className="flex items-center gap-2 px-3 py-1.5 bg-bg3 border border-border rounded-xl text-xs text-text-secondary hover:text-danger hover:border-danger/30 transition-colors">
             <LogOut size={13} />

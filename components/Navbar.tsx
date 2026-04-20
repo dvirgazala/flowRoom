@@ -10,7 +10,9 @@ import { relativeTime } from '@/lib/profile-utils'
 import Avatar from './Avatar'
 import DmChatModal from './DmChatModal'
 import VerifiedBadge from './VerifiedBadge'
-import { Home, Music2, Search, ShoppingBag, LogOut, Bell, Plus, Settings, Briefcase, MessageCircle, ShieldCheck, Wallet } from 'lucide-react'
+import { Home, Music2, Search, ShoppingBag, LogOut, Bell, Plus, Settings, Briefcase, MessageCircle, ShieldCheck, Wallet, LayoutDashboard } from 'lucide-react'
+
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? 'dvirgazala13579@gmail.com'
 import { useState, useEffect, useRef, useCallback } from 'react'
 
 const hasSupabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
@@ -140,6 +142,16 @@ export default function Navbar() {
 
       {/* Right side */}
       <div className="flex items-center gap-3 mr-auto">
+        {/* Admin dashboard button — only for admin user */}
+        {currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
+          <Link href="/admin/dashboard"
+            onClick={() => sessionStorage.setItem('admin-auth', '1')}
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-danger/10 border border-danger/20 rounded-lg text-xs font-medium text-danger hover:bg-danger/20 transition-colors">
+            <LayoutDashboard size={14} />
+            דשבורד
+          </Link>
+        )}
+
         {/* New room */}
         <Link href="/rooms" className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-brand-gradient rounded-lg text-sm font-medium text-white hover:opacity-90 transition-opacity">
           <Plus size={14} />
