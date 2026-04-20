@@ -1,72 +1,158 @@
 'use client'
 import { use, useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
-import { STAGES, getUserById } from '@/lib/data'
+import { STAGES } from '@/lib/data'
 import Avatar from '@/components/Avatar'
 import AudioPlayer from '@/components/AudioPlayer'
+import { profileToUser } from '@/lib/profile-utils'
+import * as db from '@/lib/db'
+import { uploadFile } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
+import type { DbRoom, DbRoomMember, DbProfile, DbRoomMessage, DbRoomStem, DbRoomTask } from '@/lib/supabase-types'
 import {
-  ArrowLeft, CheckSquare, Square, Upload, Music2, Clock,
-  MessageCircle, Send, Users, FileMusic, Zap, CheckCheck, ChevronRight
+  ArrowLeft, CheckSquare, Square, Upload, Music2,
+  MessageCircle, Send, Users, FileMusic, Zap, ChevronRight,
+  Loader2, Trash2,
 } from 'lucide-react'
 
+type Member = DbRoomMember & { profile: DbProfile }
+type Message = DbRoomMessage & { author: DbProfile }
+type Task = DbRoomTask & { stage: number }
+
 const TABS = [
-  { id: 'chat', label: 'צ\'אט', icon: MessageCircle },
-  { id: 'files', label: 'קבצים', icon: FileMusic },
-  { id: 'activity', label: 'פעילות', icon: Clock },
-]
+  { id: 'chat',  label: "צ'אט",   icon: MessageCircle },
+  { id: 'files', label: 'קבצים',  icon: FileMusic },
+  { id: 'tasks', label: 'משימות', icon: Zap },
+] as const
 
 export default function RoomPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { rooms, currentUser, updateTaskDone, addStem, advanceStage, addChatMessage, showToast } = useStore()
-  const room = rooms.find(r => r.id === id)
-  const [activeTab, setActiveTab] = useState<'chat' | 'files' | 'activity'>('chat')
+  const router = useRouter()
+  const { currentUser, showToast } = useStore()
+
+  const [room,     setRoom]     = useState<DbRoom | null>(null)
+  const [members,  setMembers]  = useState<Member[]>([])
+  const [messages, setMessages] = useState<Message[]>([])
+  const [stems,    setStems]    = useState<DbRoomStem[]>([])
+  const [tasks,    setTasks]    = useState<Task[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [activeTab, setActiveTab] = useState<'chat' | 'files' | 'tasks'>('chat')
   const [chatText, setChatText] = useState('')
+  const [sending,  setSending]  = useState(false)
+  const [uploading, setUploading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [room?.chatMessages?.length])
+    Promise.all([
+      db.getRoomById(id),
+      db.getRoomMembers(id),
+      db.getRoomMessages(id),
+      db.getRoomStems(id),
+      db.getRoomTasks(id),
+    ]).then(([r, m, msgs, s, t]) => {
+      if (!r) { router.push('/rooms'); return }
+      setRoom(r)
+      setMembers(m)
+      setMessages(msgs)
+      setStems(s)
+      setTasks(t as Task[])
+    }).finally(() => setLoading(false))
+  }, [id, router])
 
-  if (!room) {
+  // Realtime chat subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel(`room_msg_${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'room_messages', filter: `room_id=eq.${id}` },
+        async (payload) => {
+          const msg = payload.new as DbRoomMessage
+          const { data: profile } = await supabase.from('profiles').select('*').eq('id', msg.user_id).single()
+          if (profile) {
+            setMessages(prev => [...prev, { ...msg, author: profile as DbProfile }])
+          }
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [id])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length])
+
+  const sendChat = async () => {
+    if (!chatText.trim() || sending) return
+    setSending(true)
+    await db.sendRoomMessage(id, chatText.trim())
+    setChatText('')
+    setSending(false)
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !currentUser) return
+    setUploading(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `rooms/${id}/${Date.now()}.${ext}`
+      const url = await uploadFile('post-media', path, file)
+      if (!url) throw new Error('upload failed')
+      const sizeKB = Math.round(file.size / 1024)
+      const sizeStr = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`
+      await db.addRoomStem(id, file.name, url, sizeStr)
+      const newStems = await db.getRoomStems(id)
+      setStems(newStems)
+      showToast(`"${file.name}" הועלה בהצלחה`, 'success')
+    } catch {
+      showToast('שגיאה בהעלאת הקובץ', 'error')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleDeleteStem = async (stemId: string) => {
+    await db.deleteRoomStem(stemId)
+    setStems(prev => prev.filter(s => s.id !== stemId))
+    showToast('הקובץ נמחק', 'success')
+  }
+
+  const handleToggleTask = async (taskId: string, done: boolean) => {
+    await db.toggleRoomTask(taskId, done)
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done } : t))
+  }
+
+  const handleAdvanceStage = async () => {
+    if (!room) return
+    await db.advanceRoomStage(id, room.current_stage)
+    setRoom(prev => prev ? { ...prev, current_stage: prev.current_stage + 1 } : prev)
+    showToast('מעבר לשלב הבא!', 'success')
+  }
+
+  if (loading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-16 text-center">
-        <p className="text-text-muted">החדר לא נמצא</p>
-        <Link href="/rooms" className="text-purple text-sm hover:underline mt-2 inline-block">חזרה לחדרים</Link>
+      <div className="flex justify-center py-20">
+        <Loader2 size={28} className="animate-spin text-purple" />
       </div>
     )
   }
 
-  const user = currentUser || { id: 'u1', name: 'משתמש' }
-  const stage = STAGES[room.currentStage] ?? STAGES[0]
-  const allTasks = room.tasks ?? []
-  const allStems = room.stems ?? []
-  const allActivity = room.activity ?? []
-  const allMessages = room.chatMessages ?? []
-  const currentTasks = allTasks.filter(t => t.stage === room.currentStage)
+  if (!room) return null
+
+  const stage = STAGES[room.current_stage] ?? STAGES[0]
+  const currentTasks = tasks.filter(t => t.stage === room.current_stage)
   const doneTasks = currentTasks.filter(t => t.done).length
-  const progress = Math.round((room.currentStage / (STAGES.length - 1)) * 100)
-
-  const sendChat = () => {
-    if (!chatText.trim()) return
-    addChatMessage(room.id, chatText.trim())
-    setChatText('')
-  }
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    addStem(room.id, file.name, 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3')
-    showToast(`"${file.name}" הועלה בהצלחה 🎵`, 'success')
-    e.target.value = ''
-  }
+  const isCreator = room.created_by === currentUser?.id
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* Back */}
       <Link href="/rooms" className="inline-flex items-center gap-1.5 text-text-muted hover:text-text-primary text-sm mb-6 transition-colors">
-        <ArrowLeft size={16} />
-        חזרה לחדרים
+        <ArrowLeft size={16} />חזרה לחדרים
       </Link>
 
       {/* Header */}
@@ -74,67 +160,44 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold">{room.name}</h1>
-            <p className="text-text-secondary text-sm mt-1">{room.description}</p>
+            {room.description && <p className="text-text-secondary text-sm mt-1">{room.description}</p>}
+            {room.genre && (
+              <span className="inline-block text-xs text-purple mt-1.5 bg-purple/10 px-2.5 py-1 rounded-lg">{room.genre}</span>
+            )}
           </div>
-          <div className="flex items-center gap-3">
-            <Link href={`/rooms/${id}/splits`}
-              className="px-4 py-2 bg-bg3 rounded-xl text-sm text-text-secondary hover:text-purple hover:bg-bg2 active:scale-95 transition-all"
-              style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-              Splits
-            </Link>
-            <Link href={`/rooms/${id}/flow`}
-              className="px-4 py-2 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-glow-sm">
-              ניהול Flow
-            </Link>
-          </div>
+          <Link href={`/rooms/${id}/flow`}
+            className="px-4 py-2 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-glow-sm">
+            ניהול Flow
+          </Link>
         </div>
 
         {/* Stage progress */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">שלב נוכחי: <span className="text-purple">{stage.name}</span></span>
-            <span className="text-xs text-text-muted">{doneTasks}/{currentTasks.length} משימות · {progress}%</span>
+            <span className="text-xs text-text-muted">{doneTasks}/{currentTasks.length} משימות</span>
           </div>
-          <div className="flex gap-1 mb-1">
+          <div className="flex gap-1">
             {STAGES.map((s, i) => (
-              <div key={s.id} title={s.name} className={`flex-1 h-2 rounded-full transition-all duration-300
-                ${i < room.currentStage ? 'bg-success' : i === room.currentStage ? 'bg-brand-gradient' : 'bg-bg3'}`} />
-            ))}
-          </div>
-          <div className="flex justify-between">
-            {STAGES.map((s, i) => (
-              <span key={s.id}
-                className={`text-xs truncate text-center ${i === room.currentStage ? 'text-purple font-medium' : 'text-text-muted'}`}
-                style={{ width: `${100 / STAGES.length}%` }}>
-                {s.name}
-              </span>
+              <div key={s.id} title={s.name}
+                className={`flex-1 h-2 rounded-full transition-all duration-300 ${
+                  i < room.current_stage ? 'bg-success' : i === room.current_stage ? 'bg-purple' : 'bg-bg3'
+                }`} />
             ))}
           </div>
         </div>
 
         {/* Members row */}
-        <div className="flex items-center gap-3 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-          <div className="flex -space-x-2 space-x-reverse">
-            {room.members.map(m => {
-              const u = getUserById(m.userId)
-              if (!u) return null
-              return <Avatar key={m.userId} user={u} size="sm" showOnline />
-            })}
+        {members.length > 0 && (
+          <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+            <div className="flex -space-x-2 space-x-reverse">
+              {members.slice(0, 6).map(m => (
+                <Avatar key={m.user_id} user={profileToUser(m.profile)} size="sm" />
+              ))}
+            </div>
+            <span className="text-xs text-text-muted">{members.length} חברים</span>
           </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted">
-            {room.members.map(m => {
-              const u = getUserById(m.userId)
-              if (!u) return null
-              return (
-                <span key={m.userId} className="flex items-center gap-1">
-                  {u.name}
-                  <span className="text-text-muted/60">({m.role}, {m.split}%)</span>
-                  {m.hasSigned && <CheckCheck size={11} className="text-success" />}
-                </span>
-              )
-            })}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Main grid */}
@@ -151,80 +214,69 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           </div>
 
           <div className="space-y-2">
-            {currentTasks.map(task => {
-              const assignee = getUserById(task.assignedTo)
-              return (
-                <div key={task.id}
-                  className={`flex items-start gap-2.5 p-3 rounded-xl cursor-pointer transition-all hover:bg-bg2 ${task.done ? 'opacity-70' : ''}`}
-                  onClick={() => updateTaskDone(room.id, task.id, !task.done)}>
-                  {task.done
-                    ? <CheckSquare size={16} className="text-success flex-shrink-0 mt-0.5" />
-                    : <Square size={16} className="text-text-muted flex-shrink-0 mt-0.5" />
-                  }
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs leading-snug ${task.done ? 'line-through text-text-muted' : 'text-text-primary'}`}>{task.text}</p>
-                    {assignee && (
-                      <p className="text-xs text-text-muted mt-0.5">{assignee.name}</p>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+            {currentTasks.map(task => (
+              <div key={task.id}
+                className={`flex items-start gap-2.5 p-3 rounded-xl cursor-pointer transition-all hover:bg-bg2 ${task.done ? 'opacity-70' : ''}`}
+                onClick={() => handleToggleTask(task.id, !task.done)}>
+                {task.done
+                  ? <CheckSquare size={16} className="text-success flex-shrink-0 mt-0.5" />
+                  : <Square size={16} className="text-text-muted flex-shrink-0 mt-0.5" />
+                }
+                <p className={`text-xs leading-snug ${task.done ? 'line-through text-text-muted' : 'text-text-primary'}`}>
+                  {task.title}
+                </p>
+              </div>
+            ))}
           </div>
 
           {currentTasks.length === 0 && (
             <p className="text-text-muted text-xs text-center py-4">אין משימות לשלב זה</p>
           )}
 
-          {doneTasks === currentTasks.length && currentTasks.length > 0 && room.currentStage < STAGES.length - 1 && (
-            <button
-              onClick={() => { advanceStage(room.id); showToast('מעבר לשלב הבא! 🚀', 'success') }}
+          {doneTasks === currentTasks.length && currentTasks.length > 0 && room.current_stage < STAGES.length - 1 && (
+            <button onClick={handleAdvanceStage}
               className="w-full mt-4 py-2.5 bg-brand-gradient rounded-xl text-xs font-semibold text-white hover:opacity-90 transition-all shadow-glow-sm flex items-center justify-center gap-1.5">
-              <ChevronRight size={14} />
-              עבור לשלב הבא
+              <ChevronRight size={14} />עבור לשלב הבא
             </button>
           )}
         </div>
 
-        {/* Tab panel: Chat / Files / Activity */}
+        {/* Tab panel */}
         <div className="lg:col-span-2 bg-bg1 rounded-2xl shadow-surface overflow-hidden flex flex-col" style={{ height: 520 }}>
           {/* Tab bar */}
           <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             {TABS.map(({ id: tid, label, icon: Icon }) => (
-              <button
-                key={tid}
-                onClick={() => setActiveTab(tid as typeof activeTab)}
-                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-all flex-1 justify-center
-                  ${activeTab === tid
-                    ? 'text-purple border-b-2 border-purple'
-                    : 'text-text-muted hover:text-text-secondary hover:bg-bg2/30'
-                  }`}
+              <button key={tid} onClick={() => setActiveTab(tid)}
+                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-all flex-1 justify-center ${
+                  activeTab === tid ? 'text-purple' : 'text-text-muted hover:text-text-secondary hover:bg-bg2/30'
+                }`}
                 style={{ borderBottom: activeTab === tid ? '2px solid #a855f7' : '2px solid transparent' }}>
-                <Icon size={14} />
-                {label}
+                <Icon size={14} />{label}
               </button>
             ))}
           </div>
 
-          {/* Chat tab */}
+          {/* Chat */}
           {activeTab === 'chat' && (
             <>
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {allMessages.length === 0 && (
+                {messages.length === 0 && (
                   <p className="text-center text-text-muted text-sm py-8">עדיין אין הודעות. התחל שיחה!</p>
                 )}
-                {allMessages.map(msg => {
-                  const sender = getUserById(msg.userId)
-                  if (!sender) return null
-                  const isMe = msg.userId === user.id
+                {messages.map(msg => {
+                  const isMe = msg.user_id === currentUser?.id
+                  const u = profileToUser(msg.author)
                   return (
-                    <div key={msg.id} className={`flex items-end gap-2 fade-in ${isMe ? 'flex-row-reverse' : ''}`}>
-                      <Avatar user={sender} size="sm" />
-                      <div className={`max-w-[72%] px-3.5 py-2.5 rounded-2xl text-sm
-                        ${isMe ? 'bg-purple/20 rounded-bl-md' : 'bg-bg3 rounded-br-md'}`}>
-                        {!isMe && <p className="text-xs font-semibold text-purple mb-1">{sender.name}</p>}
+                    <div key={msg.id} className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
+                      <Avatar user={u} size="sm" />
+                      <div className={`max-w-[72%] px-3.5 py-2.5 rounded-2xl text-sm ${
+                        isMe ? 'bg-purple/20 rounded-bl-md' : 'bg-bg3 rounded-br-md'
+                      }`}>
+                        {!isMe && <p className="text-xs font-semibold text-purple mb-1">{msg.author.display_name}</p>}
                         <p className="text-text-primary leading-snug">{msg.text}</p>
-                        <p className="text-xs text-text-muted mt-0.5">{msg.createdAt}</p>
+                        <p className="text-xs text-text-muted mt-0.5">
+                          {new Date(msg.created_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
                       </div>
                     </div>
                   )
@@ -240,124 +292,122 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                   className="flex-1 bg-bg3 rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-purple/50 transition-all"
                   style={{ border: '1px solid rgba(255,255,255,0.06)' }}
                 />
-                <button onClick={sendChat} disabled={!chatText.trim()}
+                <button onClick={sendChat} disabled={!chatText.trim() || sending}
                   className="w-10 h-10 bg-brand-gradient rounded-xl flex items-center justify-center hover:opacity-90 active:scale-95 disabled:opacity-40 transition-all shadow-glow-sm flex-shrink-0">
-                  <Send size={14} className="text-white" />
+                  {sending
+                    ? <Loader2 size={14} className="text-white animate-spin" />
+                    : <Send size={14} className="text-white" />
+                  }
                 </button>
               </div>
             </>
           )}
 
-          {/* Files tab */}
+          {/* Files */}
           {activeTab === 'files' && (
             <div className="flex-1 overflow-y-auto p-4">
               <div className="flex justify-between items-center mb-4">
-                <p className="text-sm font-medium">{allStems.length} קבצים</p>
+                <p className="text-sm font-medium">{stems.length} קבצים</p>
                 <label className="flex items-center gap-2 px-3 py-1.5 bg-brand-gradient rounded-lg text-xs font-semibold text-white cursor-pointer hover:opacity-90 transition-opacity shadow-glow-sm">
-                  <Upload size={12} />
+                  {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
                   העלה קובץ
-                  <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload} />
+                  <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload} disabled={uploading} />
                 </label>
               </div>
 
-              {allStems.length === 0 ? (
+              {stems.length === 0 ? (
                 <div className="text-center py-8">
                   <Music2 size={32} className="text-text-muted mx-auto mb-2" />
                   <p className="text-text-muted text-sm">אין קבצים עדיין</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {allStems.map(stem => {
-                    const uploader = getUserById(stem.uploadedBy)
-                    return (
-                      <div key={stem.id} className="p-3 bg-bg2 rounded-xl">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <FileMusic size={14} className="text-purple flex-shrink-0" />
-                            <span className="text-xs font-medium text-text-primary">{stem.name}</span>
-                          </div>
-                          <span className="text-xs text-text-muted">{stem.size}</span>
+                  {stems.map(stem => (
+                    <div key={stem.id} className="p-3 bg-bg2 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileMusic size={14} className="text-purple flex-shrink-0" />
+                          <span className="text-xs font-medium text-text-primary truncate">{stem.name}</span>
                         </div>
-                        <AudioPlayer url={stem.audioUrl} compact />
-                        <div className="flex items-center justify-between mt-2">
-                          {uploader && <span className="text-xs text-text-muted">{uploader.name}</span>}
-                          <span className="text-xs text-text-muted">{stem.uploadedAt}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs text-text-muted">{stem.file_size}</span>
+                          {(stem.uploaded_by === currentUser?.id || isCreator) && (
+                            <button onClick={() => handleDeleteStem(stem.id)}
+                              className="p-1 rounded text-text-muted hover:text-danger transition-colors">
+                              <Trash2 size={12} />
+                            </button>
+                          )}
                         </div>
                       </div>
-                    )
-                  })}
+                      <AudioPlayer url={stem.audio_url} compact />
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
-          {/* Activity tab */}
-          {activeTab === 'activity' && (
-            <div className="flex-1 overflow-y-auto p-4">
-              {allActivity.length === 0 ? (
-                <p className="text-center text-text-muted text-sm py-8">אין פעילות עדיין</p>
-              ) : (
-                <div className="space-y-2">
-                  {allActivity.map(item => {
-                    const actor = getUserById(item.userId)
-                    const typeColors: Record<string, string> = {
-                      upload: 'bg-purple/10 text-purple',
-                      comment: 'bg-info/10 text-info',
-                      update: 'bg-success/10 text-success',
-                      join: 'bg-pink/10 text-pink',
-                      sign: 'bg-warning/10 text-warning',
-                    }
-                    return (
-                      <div key={item.id} className="flex items-start gap-3 p-3 bg-bg2 rounded-xl">
-                        {actor && <Avatar user={actor} size="sm" />}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {actor && <span className="text-xs font-semibold text-text-primary">{actor.name}</span>}
-                            <span className={`text-xs px-2 py-0.5 rounded-md ${typeColors[item.type] || 'bg-bg3 text-text-muted'}`}>
-                              {item.action}
-                            </span>
-                          </div>
-                          <p className="text-xs text-text-muted mt-0.5">{item.time}</p>
+          {/* All tasks overview */}
+          {activeTab === 'tasks' && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              {STAGES.map((s, stageIdx) => {
+                const stageTasks = tasks.filter(t => t.stage === stageIdx)
+                const stageDone = stageTasks.filter(t => t.done).length
+                const isCurrent = stageIdx === room.current_stage
+                return (
+                  <div key={s.id}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-xs font-semibold ${isCurrent ? 'text-purple' : 'text-text-muted'}`}>{s.name}</span>
+                      <span className="text-xs text-text-muted">({stageDone}/{stageTasks.length})</span>
+                      {stageIdx < room.current_stage && <span className="text-success text-xs">✓</span>}
+                      {isCurrent && <span className="text-xs bg-purple/15 text-purple px-1.5 py-0.5 rounded-md">נוכחי</span>}
+                    </div>
+                    <div className="space-y-1 mr-1">
+                      {stageTasks.map(task => (
+                        <div key={task.id}
+                          className={`flex items-start gap-2 p-2.5 rounded-lg cursor-pointer hover:bg-bg2 transition-colors ${task.done ? 'opacity-60' : ''}`}
+                          onClick={() => handleToggleTask(task.id, !task.done)}>
+                          {task.done
+                            ? <CheckSquare size={14} className="text-success flex-shrink-0 mt-0.5" />
+                            : <Square size={14} className="text-text-muted flex-shrink-0 mt-0.5" />
+                          }
+                          <p className={`text-xs ${task.done ? 'line-through text-text-muted' : ''}`}>{task.title}</p>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
       </div>
 
       {/* Members card */}
-      <div className="bg-bg1 rounded-2xl shadow-surface p-5 mt-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Users size={15} className="text-purple" />
-          <h2 className="font-semibold text-sm">חברי הצוות</h2>
+      {members.length > 0 && (
+        <div className="bg-bg1 rounded-2xl shadow-surface p-5 mt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Users size={15} className="text-purple" />
+            <h2 className="font-semibold text-sm">חברי הצוות</h2>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {members.map(m => {
+              const u = profileToUser(m.profile)
+              return (
+                <Link key={m.user_id} href={`/profile/${m.profile.username}`}
+                  className="flex flex-col items-center gap-2 p-3 bg-bg2 rounded-xl hover:bg-bg3 transition-colors group text-center">
+                  <Avatar user={u} size="md" />
+                  <div>
+                    <p className="text-xs font-medium group-hover:text-purple transition-colors">{m.profile.display_name}</p>
+                    <p className="text-text-muted text-xs">{m.role}</p>
+                    <p className="text-purple text-xs font-bold">{m.split}%</p>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {room.members.map(m => {
-            const u = getUserById(m.userId)
-            if (!u) return null
-            return (
-              <Link key={m.userId} href={`/profile/${u.id}`}
-                className="flex flex-col items-center gap-2 p-3 bg-bg2 rounded-xl hover:bg-bg3 transition-colors group text-center">
-                <Avatar user={u} size="md" showOnline />
-                <div>
-                  <p className="text-xs font-medium group-hover:text-purple transition-colors">{u.name}</p>
-                  <p className="text-text-muted text-xs">{m.role}</p>
-                  <p className="text-purple text-xs font-bold">{m.split}%</p>
-                </div>
-                {m.hasSigned && (
-                  <span className="flex items-center gap-0.5 text-success text-xs">
-                    <CheckCheck size={10} /> חתם
-                  </span>
-                )}
-              </Link>
-            )
-          })}
-        </div>
-      </div>
+      )}
     </div>
   )
 }

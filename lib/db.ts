@@ -1,7 +1,7 @@
 'use client'
 import { supabase } from './supabase'
 import type {
-  DbProfile, DbPost, DbComment, DbRoom, DbRoomMessage,
+  DbProfile, DbPost, DbComment, DbRoom, DbRoomMember, DbRoomMessage,
   DbRoomStem, DbRoomTask, DbDirectMessage, DbNotification,
   Privacy, NotificationType,
 } from './supabase-types'
@@ -245,29 +245,57 @@ export async function getRoomMembers(roomId: string) {
     .from('room_members')
     .select('*, profile:profiles!room_members_user_id_fkey(*)')
     .eq('room_id', roomId)
-  return (data ?? []) as (DbRoom & { profile: DbProfile })[]
+  return (data ?? []) as (DbRoomMember & { profile: DbProfile })[]
 }
+
+const DEFAULT_STAGE_TASKS: string[][] = [
+  ['הגדרת ז\'אנר וויב', 'איסוף רפרנסים', 'הגדרת קהל יעד'],
+  ['כתיבת טקסט ראשוני', 'הגדרת מבנה שיר', 'עריכה ואישור'],
+  ['מלודיה ראשית', 'הרמוניות ואקורדים', 'קביעת טמפו'],
+  ['בניית beat', 'עיצוב סאונד', 'הפקה מלאה'],
+  ['הקלטת גיידאנס', 'הקלטה סופית', 'הקלטת כלים'],
+  ['מיקס ראשוני', 'תיקונים', 'מאסטרינג'],
+  ['העלאה לפלטפורמות', 'ארטוורק', 'שיווק ופרסום'],
+]
 
 export async function createRoom(opts: { name: string; genre?: string; description?: string }) {
   const session = await getSession(); if (!session) return { error: new Error('not logged in') }
   const { data: room, error } = await supabase
     .from('rooms')
-    .insert({
-      name:        opts.name,
-      genre:       opts.genre ?? 'כללי',
-      description: opts.description ?? '',
-      created_by:  session.user.id,
-    })
+    .insert({ name: opts.name, genre: opts.genre ?? 'כללי', description: opts.description ?? '', created_by: session.user.id })
     .select().single()
   if (error || !room) return { error }
-  // Auto-add creator as member with 100% split + producer role
-  await supabase.from('room_members').insert({
-    room_id: room.id, user_id: session.user.id, role: 'מפיק', split: 100,
-  })
-  await supabase.from('room_activity').insert({
-    room_id: room.id, user_id: session.user.id, action: 'יצר את החדר', type: 'join',
-  })
-  return { data: room, error: null }
+  await supabase.from('room_members').insert({ room_id: room.id, user_id: session.user.id, role: 'מפיק', split: 100 })
+  // Create default tasks for all stages
+  const tasks = DEFAULT_STAGE_TASKS.flatMap((stageTasks, stage) =>
+    stageTasks.map((title, i) => ({ room_id: room.id, title, stage, sort_order: i, done: false }))
+  )
+  await supabase.from('room_tasks').insert(tasks)
+  return { data: room as DbRoom, error: null }
+}
+
+export async function joinRoom(roomId: string, role = 'אמן', split = 0) {
+  const session = await getSession(); if (!session) return { error: new Error('not logged in') }
+  const { error } = await supabase.from('room_members')
+    .upsert({ room_id: roomId, user_id: session.user.id, role, split }, { onConflict: 'room_id,user_id' })
+  return { error }
+}
+
+export async function leaveRoom(roomId: string) {
+  const session = await getSession(); if (!session) return
+  await supabase.from('room_members').delete().match({ room_id: roomId, user_id: session.user.id })
+}
+
+export async function updateRoomMember(roomId: string, userId: string, patch: { role?: string; split?: number }) {
+  return supabase.from('room_members').update(patch).match({ room_id: roomId, user_id: userId })
+}
+
+export async function deleteRoomStem(stemId: string) {
+  return supabase.from('room_stems').delete().eq('id', stemId)
+}
+
+export async function addRoomTask(roomId: string, title: string, stage: number) {
+  return supabase.from('room_tasks').insert({ room_id: roomId, title, stage, done: false })
 }
 
 export async function addRoomMember(roomId: string, userId: string, role: string, split: number) {

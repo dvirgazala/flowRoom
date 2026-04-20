@@ -102,6 +102,8 @@ export interface DbRoomTask {
   title: string
   done: boolean
   assigned_to: string | null
+  stage: number
+  sort_order: number
   created_at: string
 }
 
