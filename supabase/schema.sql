@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   id           UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   from_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  type         TEXT NOT NULL CHECK (type IN ('like','comment','follow','mention','room_invite','split_request')),
+  type         TEXT NOT NULL CHECK (type IN ('like','comment','follow','mention','room_invite','split_request','room_admin')),
   post_id      UUID REFERENCES posts(id) ON DELETE SET NULL,
   room_id      UUID REFERENCES rooms(id) ON DELETE SET NULL,
   message      TEXT DEFAULT '',
