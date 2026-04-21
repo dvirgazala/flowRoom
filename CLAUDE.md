@@ -26,11 +26,20 @@ npm run build    # type-check + production build ← run before every push
 npm run lint     # ESLint
 ```
 
+## Verification rule — mandatory before reporting done
+
+**Never tell the user a feature is ready without running `/verify-before-done`.**
+The skill at `.claude/skills/verify-before-done/SKILL.md` defines the full checklist:
+build pass → DB schema confirmed → notification rows confirmed → RLS logic confirmed → Realtime confirmed.
+
+Past failures happened when changes were reported as done but the DB column didn't exist, a CHECK constraint blocked inserts, or a table wasn't in the Realtime publication. Always verify in the actual DB, not just in code.
+
 ## Custom slash commands
 
 | Command | Purpose |
 |---|---|
 | `/deploy` | Build → stage → commit → push to Render |
+| `/verify-before-done` | Run full verification checklist before reporting a feature as ready |
 | `/regulatory-verify` | Check and re-verify stale regulatory rules |
 | `/flowroom-context` | Load full architecture context (do this first) |
 
