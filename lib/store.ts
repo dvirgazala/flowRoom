@@ -18,6 +18,7 @@ interface AppState {
   currentUser: User | null
   login: (userId: string) => void
   logout: () => void
+  setCurrentUser: (user: User) => void
   updateCurrentUser: (patch: Partial<User>) => void
 
   // Users (mutable copy for admin actions)
@@ -108,6 +109,8 @@ export const useStore = create<AppState>()(
       },
 
       logout: () => set({ currentUser: null }),
+
+      setCurrentUser: (user) => set({ currentUser: user }),
 
       updateCurrentUser: (patch) => set(s => ({
         currentUser: s.currentUser ? { ...s.currentUser, ...patch } : null,

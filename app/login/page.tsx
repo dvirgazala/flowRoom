@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { signIn } from '@/lib/db'
+import { signIn, getMyProfile } from '@/lib/db'
+import { profileToUser } from '@/lib/profile-utils'
 import { Music2, Eye, EyeOff } from 'lucide-react'
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? 'dvirgazala13579@gmail.com'
@@ -11,6 +12,7 @@ const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? 'dvirgazala13579@gmai
 export default function LoginPage() {
   const router    = useRouter()
   const showToast = useStore(s => s.showToast)
+  const setCurrentUser = useStore(s => s.setCurrentUser)
 
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
@@ -27,7 +29,10 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
-      // Admin check: compare email directly — no extra DB round-trip
+      // Fetch real profile from Supabase and hydrate the store
+      const profile = await getMyProfile()
+      if (profile) setCurrentUser(profileToUser(profile))
+
       const userEmail = data?.user?.email ?? ''
       if (ADMIN_EMAIL && userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         sessionStorage.setItem('admin-auth', '1')

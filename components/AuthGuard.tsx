@@ -1,22 +1,39 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
+import { getMyProfile, getSession } from '@/lib/db'
+import { profileToUser } from '@/lib/profile-utils'
 import { Music2 } from 'lucide-react'
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const currentUser = useStore(s => s.currentUser)
+  const setCurrentUser = useStore(s => s.setCurrentUser)
   const hasHydrated = useStore(s => s._hasHydrated)
+  const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    if (hasHydrated && !currentUser) {
-      router.replace('/login')
-    }
-  }, [hasHydrated, currentUser, router])
+    if (!hasHydrated) return
+    ;(async () => {
+      const session = await getSession()
+      if (!session) {
+        // No Supabase session — clear stale store user and redirect
+        if (currentUser) useStore.setState({ currentUser: null })
+        router.replace('/login')
+        setChecking(false)
+        return
+      }
+      // Session exists — make sure store has the real Supabase profile
+      if (!currentUser || currentUser.id !== session.user.id) {
+        const profile = await getMyProfile()
+        if (profile) setCurrentUser(profileToUser(profile))
+      }
+      setChecking(false)
+    })()
+  }, [hasHydrated]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Waiting for localStorage to hydrate — show branded spinner
-  if (!hasHydrated) {
+  if (!hasHydrated || checking) {
     return (
       <div className="min-h-screen bg-bg0 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -29,7 +46,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Hydrated but no user — redirect is in flight, render nothing
   if (!currentUser) return null
 
   return <>{children}</>
