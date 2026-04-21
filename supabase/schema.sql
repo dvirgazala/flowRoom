@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS room_members (
   room_id    UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
   user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   role       TEXT NOT NULL DEFAULT 'חבר',
+  is_admin   BOOLEAN NOT NULL DEFAULT FALSE,
   split      INT DEFAULT 0 CHECK (split BETWEEN 0 AND 100),
   has_signed BOOLEAN DEFAULT FALSE,
   joined_at  TIMESTAMPTZ DEFAULT NOW(),
@@ -469,9 +470,11 @@ CREATE POLICY "room_members_insert" ON room_members FOR INSERT WITH CHECK (
 CREATE POLICY "room_members_delete" ON room_members FOR DELETE USING (
   auth.uid() = user_id
   OR auth.uid() IN (SELECT created_by FROM rooms WHERE id = room_id)
+  OR EXISTS (SELECT 1 FROM room_members rm WHERE rm.room_id = room_members.room_id AND rm.user_id = auth.uid() AND rm.is_admin = true)
 );
 CREATE POLICY "room_members_update" ON room_members FOR UPDATE USING (
   auth.uid() IN (SELECT created_by FROM rooms WHERE id = room_id)
+  OR EXISTS (SELECT 1 FROM room_members rm WHERE rm.room_id = room_members.room_id AND rm.user_id = auth.uid() AND rm.is_admin = true)
   OR (auth.uid() = user_id AND has_signed = false)
 );
 
