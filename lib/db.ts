@@ -265,7 +265,7 @@ export async function createRoom(opts: { name: string; genre?: string; descripti
     .insert({ name: opts.name, genre: opts.genre ?? 'כללי', description: opts.description ?? '', created_by: session.user.id })
     .select().single()
   if (error || !room) return { error }
-  await supabase.from('room_members').insert({ room_id: room.id, user_id: session.user.id, role: 'מפיק', split: 100 })
+  await supabase.from('room_members').insert({ room_id: room.id, user_id: session.user.id, role: 'מפיק', split: 100, is_admin: true })
   // Create default tasks for all stages
   const tasks = DEFAULT_STAGE_TASKS.flatMap((stageTasks, stage) =>
     stageTasks.map((title, i) => ({ room_id: room.id, title, stage, sort_order: i, done: false }))
@@ -421,6 +421,22 @@ export async function acceptRoomInvite(notifId: string, roomId: string) {
 
 export async function declineRoomInvite(notifId: string) {
   return supabase.from('notifications').update({ read: true }).eq('id', notifId)
+}
+
+export async function promoteToAdmin(roomId: string, userId: string) {
+  return supabase.from('room_members').update({ is_admin: true }).match({ room_id: roomId, user_id: userId })
+}
+
+export async function revokeAdmin(roomId: string, userId: string) {
+  return supabase.from('room_members').update({ is_admin: false }).match({ room_id: roomId, user_id: userId })
+}
+
+export async function removeMember(roomId: string, userId: string) {
+  return supabase.from('room_members').delete().match({ room_id: roomId, user_id: userId })
+}
+
+export async function updateMemberRole(roomId: string, userId: string, role: string) {
+  return supabase.from('room_members').update({ role }).match({ room_id: roomId, user_id: userId })
 }
 
 // ============================================================

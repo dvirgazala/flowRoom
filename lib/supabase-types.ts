@@ -73,6 +73,7 @@ export interface DbRoomMember {
   room_id: string
   user_id: string
   role: string
+  is_admin: boolean
   split: number
   has_signed: boolean
   joined_at: string

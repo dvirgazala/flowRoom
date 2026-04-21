@@ -14,7 +14,7 @@ import type { DbRoom, DbRoomMember, DbProfile, DbRoomMessage, DbRoomStem, DbRoom
 import {
   ArrowLeft, CheckSquare, Square, Upload, Music2,
   MessageCircle, Send, Users, FileMusic, Zap, ChevronRight,
-  Loader2, Trash2, UserPlus, X, Search,
+  Loader2, Trash2, UserPlus, X, Search, Crown, MoreVertical,
 } from 'lucide-react'
 
 type Member = DbRoomMember & { profile: DbProfile }
@@ -26,6 +26,8 @@ const TABS = [
   { id: 'files', label: 'קבצים',  icon: FileMusic },
   { id: 'tasks', label: 'משימות', icon: Zap },
 ] as const
+
+const MUSIC_ROLES = ['מפיק', 'אמן', 'זמר/ת', 'כותב/ת', 'מלחין/ת', 'מיקסר', 'מאסטרינג', 'מנגן/ת', 'DJ']
 
 export default function RoomPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -46,6 +48,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   const [inviteQ,    setInviteQ]    = useState('')
   const [inviteRes,  setInviteRes]  = useState<DbProfile[]>([])
   const [inviting,   setInviting]   = useState<string | null>(null)
+  const [memberAction, setMemberAction] = useState<Member | null>(null)
+  const [editRole, setEditRole] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -66,7 +71,6 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  // Realtime chat subscription
   useEffect(() => {
     const channel = supabase
       .channel(`room_msg_${id}`)
@@ -88,6 +92,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  const myMember = members.find(m => m.user_id === currentUser?.id)
+  const isAdmin = myMember?.is_admin || room?.created_by === currentUser?.id
 
   const sendChat = async () => {
     if (!chatText.trim() || sending) return
@@ -158,10 +165,55 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   }
 
   const handleAdvanceStage = async () => {
-    if (!room) return
+    if (!room || !isAdmin) return
     await db.advanceRoomStage(id, room.current_stage)
     setRoom(prev => prev ? { ...prev, current_stage: prev.current_stage + 1 } : prev)
     showToast('מעבר לשלב הבא!', 'success')
+  }
+
+  const openMemberAction = (member: Member) => {
+    setEditRole(member.role)
+    setMemberAction(member)
+  }
+
+  const handlePromote = async () => {
+    if (!memberAction) return
+    setActionLoading(true)
+    await db.promoteToAdmin(id, memberAction.user_id)
+    setMembers(prev => prev.map(m => m.user_id === memberAction.user_id ? { ...m, is_admin: true } : m))
+    showToast(`${memberAction.profile.display_name} הפך למנהל`, 'success')
+    setActionLoading(false)
+    setMemberAction(null)
+  }
+
+  const handleRevoke = async () => {
+    if (!memberAction) return
+    setActionLoading(true)
+    await db.revokeAdmin(id, memberAction.user_id)
+    setMembers(prev => prev.map(m => m.user_id === memberAction.user_id ? { ...m, is_admin: false } : m))
+    showToast('הרשאת מנהל הוסרה', 'success')
+    setActionLoading(false)
+    setMemberAction(null)
+  }
+
+  const handleRemove = async () => {
+    if (!memberAction) return
+    setActionLoading(true)
+    await db.removeMember(id, memberAction.user_id)
+    setMembers(prev => prev.filter(m => m.user_id !== memberAction.user_id))
+    showToast(`${memberAction.profile.display_name} הוסר מהחדר`, 'success')
+    setActionLoading(false)
+    setMemberAction(null)
+  }
+
+  const handleUpdateRole = async () => {
+    if (!memberAction || !editRole.trim()) return
+    setActionLoading(true)
+    await db.updateMemberRole(id, memberAction.user_id, editRole.trim())
+    setMembers(prev => prev.map(m => m.user_id === memberAction.user_id ? { ...m, role: editRole.trim() } : m))
+    showToast('תפקיד עודכן', 'success')
+    setActionLoading(false)
+    setMemberAction(null)
   }
 
   if (loading) {
@@ -175,6 +227,8 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
   if (!room) return null
 
   const stage = STAGES[room.current_stage] ?? STAGES[0]
+  const currentTasks = tasks.filter(t => t.stage === room.current_stage)
+  const doneTasks = currentTasks.filter(t => t.done).length
 
   const InviteModal = showInvite ? (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -219,14 +273,81 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
       </div>
     </div>
   ) : null
-  const currentTasks = tasks.filter(t => t.stage === room.current_stage)
-  const doneTasks = currentTasks.filter(t => t.done).length
-  const isCreator = room.created_by === currentUser?.id
+
+  const MemberActionModal = memberAction && isAdmin && memberAction.user_id !== currentUser?.id ? (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={() => setMemberAction(null)}>
+      <div className="bg-bg1 rounded-2xl p-6 w-full max-w-xs shadow-surface-lg"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <Avatar user={profileToUser(memberAction.profile)} size="md" />
+            <div>
+              <div className="flex items-center gap-1.5">
+                <p className="font-semibold text-sm">{memberAction.profile.display_name}</p>
+                {memberAction.is_admin && <Crown size={12} className="text-yellow-400" />}
+              </div>
+              <p className="text-xs text-text-muted">@{memberAction.profile.username}</p>
+            </div>
+          </div>
+          <button onClick={() => setMemberAction(null)}
+            className="p-1.5 rounded-full hover:bg-bg3 text-text-muted transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Role edit */}
+        <div className="mb-4">
+          <p className="text-xs text-text-muted mb-1.5">תפקיד מוזיקלי</p>
+          <div className="flex gap-2">
+            <input
+              value={editRole}
+              onChange={e => setEditRole(e.target.value)}
+              placeholder="תפקיד..."
+              className="flex-1 bg-bg3 border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-purple"
+            />
+            <button onClick={handleUpdateRole} disabled={actionLoading || editRole === memberAction.role}
+              className="px-3 py-2 bg-purple/20 text-purple border border-purple/30 rounded-xl text-xs font-medium hover:bg-purple/30 disabled:opacity-40 transition-colors">
+              שמור
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {MUSIC_ROLES.map(r => (
+              <button key={r} onClick={() => setEditRole(r)}
+                className={`text-xs px-2 py-0.5 rounded-lg border transition-colors ${
+                  editRole === r ? 'bg-purple/20 text-purple border-purple/40' : 'bg-bg3 text-text-muted border-border hover:border-purple/30'
+                }`}>{r}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {memberAction.is_admin ? (
+            <button onClick={handleRevoke} disabled={actionLoading}
+              className="w-full py-2.5 bg-bg3 border border-border rounded-xl text-sm text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              <Crown size={14} />הסר הרשאת מנהל
+            </button>
+          ) : (
+            <button onClick={handlePromote} disabled={actionLoading}
+              className="w-full py-2.5 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-sm text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              <Crown size={14} />הפוך למנהל
+            </button>
+          )}
+          <button onClick={handleRemove} disabled={actionLoading}
+            className="w-full py-2.5 bg-danger/10 border border-danger/30 rounded-xl text-sm text-danger hover:bg-danger/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            {actionLoading ? <Loader2 size={14} className="animate-spin" /> : null}
+            הסר מהחדר
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       {InviteModal}
-      {/* Back */}
+      {MemberActionModal}
+
       <Link href="/rooms" className="inline-flex items-center gap-1.5 text-text-muted hover:text-text-primary text-sm mb-6 transition-colors">
         <ArrowLeft size={16} />חזרה לחדרים
       </Link>
@@ -241,14 +362,18 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
               <span className="inline-block text-xs text-purple mt-1.5 bg-purple/10 px-2.5 py-1 rounded-lg">{room.genre}</span>
             )}
           </div>
-          <button onClick={() => setShowInvite(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-bg3 border border-border rounded-xl text-sm text-text-secondary hover:text-purple hover:border-purple/40 transition-all">
-            <UserPlus size={15} />הזמן
-          </button>
-          <Link href={`/rooms/${id}/flow`}
-            className="px-4 py-2 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-glow-sm">
-            ניהול Flow
-          </Link>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button onClick={() => setShowInvite(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-bg3 border border-border rounded-xl text-sm text-text-secondary hover:text-purple hover:border-purple/40 transition-all">
+                <UserPlus size={15} />הזמן
+              </button>
+            )}
+            <Link href={`/rooms/${id}/flow`}
+              className="px-4 py-2 bg-brand-gradient rounded-xl text-sm font-semibold text-white hover:opacity-90 active:scale-95 transition-all shadow-glow-sm">
+              ניהול Flow
+            </Link>
+          </div>
         </div>
 
         {/* Stage progress */}
@@ -313,7 +438,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             <p className="text-text-muted text-xs text-center py-4">אין משימות לשלב זה</p>
           )}
 
-          {doneTasks === currentTasks.length && currentTasks.length > 0 && room.current_stage < STAGES.length - 1 && (
+          {isAdmin && doneTasks === currentTasks.length && currentTasks.length > 0 && room.current_stage < STAGES.length - 1 && (
             <button onClick={handleAdvanceStage}
               className="w-full mt-4 py-2.5 bg-brand-gradient rounded-xl text-xs font-semibold text-white hover:opacity-90 transition-all shadow-glow-sm flex items-center justify-center gap-1.5">
               <ChevronRight size={14} />עבור לשלב הבא
@@ -323,7 +448,6 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
         {/* Tab panel */}
         <div className="lg:col-span-2 bg-bg1 rounded-2xl shadow-surface overflow-hidden flex flex-col" style={{ height: 520 }}>
-          {/* Tab bar */}
           <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             {TABS.map(({ id: tid, label, icon: Icon }) => (
               <button key={tid} onClick={() => setActiveTab(tid)}
@@ -411,7 +535,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-xs text-text-muted">{stem.file_size}</span>
-                          {(stem.uploaded_by === currentUser?.id || isCreator) && (
+                          {(stem.uploaded_by === currentUser?.id || isAdmin) && (
                             <button onClick={() => handleDeleteStem(stem.id)}
                               className="p-1 rounded text-text-muted hover:text-danger transition-colors">
                               <Trash2 size={12} />
@@ -469,20 +593,38 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
           <div className="flex items-center gap-2 mb-4">
             <Users size={15} className="text-purple" />
             <h2 className="font-semibold text-sm">חברי הצוות</h2>
+            {isAdmin && <span className="text-xs text-text-muted bg-bg3 px-2 py-0.5 rounded-lg mr-auto">לחץ על חבר לניהול</span>}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {members.map(m => {
               const u = profileToUser(m.profile)
+              const isSelf = m.user_id === currentUser?.id
               return (
-                <Link key={m.user_id} href={`/profile/${m.profile.username}`}
-                  className="flex flex-col items-center gap-2 p-3 bg-bg2 rounded-xl hover:bg-bg3 transition-colors group text-center">
-                  <Avatar user={u} size="md" />
-                  <div>
-                    <p className="text-xs font-medium group-hover:text-purple transition-colors">{m.profile.display_name}</p>
-                    <p className="text-text-muted text-xs">{m.role}</p>
-                    <p className="text-purple text-xs font-bold">{m.split}%</p>
-                  </div>
-                </Link>
+                <div key={m.user_id} className="relative group">
+                  <Link href={`/profile/${m.profile.username}`}
+                    className="flex flex-col items-center gap-2 p-3 bg-bg2 rounded-xl hover:bg-bg3 transition-colors text-center block">
+                    <div className="relative">
+                      <Avatar user={u} size="md" />
+                      {m.is_admin && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center">
+                          <Crown size={9} className="text-white" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium group-hover:text-purple transition-colors">{m.profile.display_name}</p>
+                      <p className="text-text-muted text-xs">{m.role}</p>
+                      <p className="text-purple text-xs font-bold">{m.split}%</p>
+                    </div>
+                  </Link>
+                  {isAdmin && !isSelf && (
+                    <button
+                      onClick={() => openMemberAction(m)}
+                      className="absolute top-2 left-2 w-6 h-6 rounded-full bg-bg3/80 border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-bg2">
+                      <MoreVertical size={11} className="text-text-muted" />
+                    </button>
+                  )}
+                </div>
               )
             })}
           </div>
