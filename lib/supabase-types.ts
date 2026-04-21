@@ -2,7 +2,7 @@
 // Hand-maintained — keep in sync with the SQL file.
 
 export type Privacy = 'public' | 'friends' | 'private'
-export type NotificationType = 'like' | 'comment' | 'follow' | 'mention' | 'room_invite' | 'split_request'
+export type NotificationType = 'like' | 'comment' | 'follow' | 'mention' | 'room_invite' | 'split_request' | 'room_admin'
 export type ActivityType = 'join' | 'stem' | 'stage' | 'chat' | 'action'
 
 export interface DbProfile {

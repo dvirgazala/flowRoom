@@ -20,6 +20,7 @@ const hasSupabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_
 const NOTIF_DOT: Record<string, string> = {
   like: 'bg-pink', comment: 'bg-info', follow: 'bg-purple',
   mention: 'bg-warning', room_invite: 'bg-purple', split_request: 'bg-warning',
+  room_admin: 'bg-yellow-400',
 }
 
 function notifText(n: NotificationWithFrom): string {
@@ -30,6 +31,7 @@ function notifText(n: NotificationWithFrom): string {
   if (n.type === 'mention') return `${who} הזכיר אותך`
   if (n.type === 'room_invite') return `${who} הזמין אותך לחדר`
   if (n.type === 'split_request') return `${who} שלח בקשת splits`
+  if (n.type === 'room_admin') return n.message || `${who} הפך אותך למנהל חדר`
   return n.message || 'התראה חדשה'
 }
 
@@ -297,6 +299,13 @@ export default function Navbar() {
                             דחה
                           </button>
                         </div>
+                      )}
+                      {n.type === 'room_admin' && n.room_id && (
+                        <button
+                          onClick={() => { setNotifOpen(false); router.push(`/rooms/${n.room_id}`) }}
+                          className="mt-2 px-3 py-1 bg-yellow-500/20 border border-yellow-500/40 rounded-lg text-xs font-semibold text-yellow-400 hover:bg-yellow-500/30 transition-colors">
+                          לך לחדר
+                        </button>
                       )}
                     </div>
                   </div>

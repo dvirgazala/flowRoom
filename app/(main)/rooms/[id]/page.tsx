@@ -71,6 +71,30 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     }).finally(() => setLoading(false))
   }, [id, router])
 
+  // Realtime: member role changes (promotions, removals)
+  useEffect(() => {
+    const channel = supabase
+      .channel(`room_members_${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'room_members', filter: `room_id=eq.${id}` },
+        (payload) => {
+          const updated = payload.new as DbRoomMember
+          setMembers(prev => prev.map(m => m.user_id === updated.user_id ? { ...m, ...updated } : m))
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'room_members', filter: `room_id=eq.${id}` },
+        (payload) => {
+          const deleted = payload.old as { user_id: string }
+          setMembers(prev => prev.filter(m => m.user_id !== deleted.user_id))
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [id])
+
   useEffect(() => {
     const channel = supabase
       .channel(`room_msg_${id}`)
