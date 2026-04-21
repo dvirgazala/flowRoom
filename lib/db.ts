@@ -438,7 +438,17 @@ export async function promoteToAdmin(roomId: string, userId: string) {
 }
 
 export async function revokeAdmin(roomId: string, userId: string) {
-  return supabase.from('room_members').update({ is_admin: false }).match({ room_id: roomId, user_id: userId })
+  await supabase.from('room_members').update({ is_admin: false }).match({ room_id: roomId, user_id: userId })
+  const session = await getSession()
+  if (!session) return
+  const { data: room } = await supabase.from('rooms').select('name').eq('id', roomId).single()
+  await supabase.from('notifications').insert({
+    user_id: userId,
+    from_user_id: session.user.id,
+    type: 'room_admin',
+    room_id: roomId,
+    message: `הוסרת מהרשאת מנהל בחדר "${room?.name ?? ''}"`,
+  })
 }
 
 export async function removeMember(roomId: string, userId: string) {
