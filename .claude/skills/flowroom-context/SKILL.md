@@ -37,7 +37,7 @@ The product has five pillars:
 | Styling | **Tailwind CSS 4** | CSS-first config via `@theme` in `app/globals.css`. `tailwind.config.ts` exists for compatibility. |
 | State | **Zustand 5** | Single store at `lib/store.ts` with `persist` middleware, localStorage key `flowroom-store`. |
 | Icons | **Lucide React** | All icons. No mixed icon libraries. |
-| Auth / DB | **Supabase** | `lib/db.ts`. Currently minimal — auth only. All other state lives client-side. |
+| Auth / DB | **Supabase** | `lib/db.ts` — full DB layer (60+ functions). Rooms, members, messages, stems, tasks, notifications, stories all read/write Supabase. Auth via `supabase.auth`. Service role key in `.env.local`. |
 | Deployment | **Render** from `git push origin master` | User does NOT use `npm run dev`. Every change must be pushed to be visible. |
 
 No tests. Build is the only type-check gate: `npm run build`.
@@ -58,8 +58,11 @@ app/
 └── page.tsx         # redirects to /feed
 ```
 
-### Single-store pattern
-All state mutations flow through Zustand actions in `lib/store.ts`. Never keep long-lived state in component-local `useState` if it should persist across pages or sessions.
+### Data architecture — Supabase-first for rooms, Zustand for UI/auth
+
+- **Supabase** is the source of truth for: rooms, room_members, room_messages, room_stems, room_tasks, notifications, posts, profiles, stories.
+- **Zustand** (`lib/store.ts`) handles: `currentUser` (synced from Supabase profile on login/refresh), theme, toast, splitSheets, earnings, adminLogs. It also holds legacy mock `users`/`posts`/`rooms` for parts of the UI not yet migrated.
+- `currentUser.id` **must** be the Supabase UUID — it is synced in `AuthGuard` and `login/page.tsx` via `profileToUser()`. Never compare it to mock IDs.
 
 **Persisted slices** (via `partialize`): `currentUser`, `users`, `posts`, `rooms`, `adminLogs`, `theme`, `splitSheets`, `earningsBatches`, `earningsLines`.
 
@@ -122,10 +125,13 @@ New Media Social Media/
 │   ├── ThemeApplier.tsx
 │   └── Toast.tsx
 ├── lib/
-│   ├── store.ts                    # Zustand — all mutations
-│   ├── data.ts                     # seed data (USERS, ROOMS, FEED_POSTS, PRODUCTS, STAGES, AUDIO)
-│   ├── types.ts                    # all TypeScript types
-│   └── db.ts                       # Supabase client
+│   ├── store.ts                    # Zustand — currentUser, theme, toast, splitSheets, earnings
+│   ├── db.ts                       # Supabase DB layer — 60+ functions for all entities
+│   ├── supabase.ts                 # Supabase client init + uploadFile helper
+│   ├── supabase-types.ts           # DB row types (DbRoom, DbProfile, DbRoomMember, etc.)
+│   ├── profile-utils.ts            # profileToUser(), relativeTime()
+│   ├── data.ts                     # seed/mock data (USERS, STAGES, AUDIO — legacy)
+│   └── types.ts                    # app-level TypeScript types (User, Room, etc.)
 ├── .claude/
 │   ├── settings.local.json
 │   └── skills/                     # project-level skills (this file lives here)
@@ -138,8 +144,8 @@ New Media Social Media/
 
 ## 5. Strict Coding Rules
 
-### R1 — All state via the store
-Never persist UI state with `useState` if it should survive a page change. Add a slice + action to `lib/store.ts`. Exception: ephemeral form inputs, modal open/closed flags.
+### R1 — Supabase for data, Zustand for UI/auth
+Room data (members, messages, stems, tasks) lives in Supabase — fetch with `lib/db.ts`, set in component state with `useState`. Do NOT put Supabase data in Zustand. Zustand is for `currentUser`, theme, toast, splitSheets, and earnings. Exception: ephemeral form inputs and modal flags — those stay in local `useState`.
 
 ### R2 — Guard persisted arrays
 Old localStorage data may predate new array fields. Always read with fallback:
@@ -284,14 +290,17 @@ When working on this system, reuse the Gemini + Supabase infrastructure from oth
 
 These aren't built yet — create when the pain is real:
 
-### `/deploy`
-Runs build → stages `app components lib` → commits with auto-generated message from git diff → pushes to `origin master`. Replaces the 4-step manual flow.
+### `/deploy` ✅ built
+Runs build → stages project files → commits → pushes to `origin master`. See `.claude/commands/deploy.md`.
+
+### `/verify-before-done` ✅ built
+Full verification checklist: build + live DB queries + realtime check. See `.claude/skills/verify-before-done/SKILL.md`. **Run before every "done".**
 
 ### `/verify-regulatory`
-Once the freshness system exists — triggers the Gemini diff pass on-demand instead of waiting for the weekly cron. Reports pending changes in admin inbox.
+Once the freshness system exists — triggers the Gemini diff pass on-demand. Not yet built.
 
 ### `/new-room-route`
-Scaffolds a new sub-route under `/rooms/[id]/*` with the standard params pattern (React 19 `use`), breadcrumb, and store hook setup.
+Scaffolds a new sub-route under `/rooms/[id]/*`. Not yet built.
 
 ---
 
