@@ -3,13 +3,15 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { signUp } from '@/lib/db'
+import { signUp, getMyProfile } from '@/lib/db'
+import { profileToUser } from '@/lib/profile-utils'
 import { Music2, Eye, EyeOff } from 'lucide-react'
 import ProfileCompletionModal from '@/components/ProfileCompletionModal'
 
 export default function SignupPage() {
-  const router    = useRouter()
-  const showToast = useStore(s => s.showToast)
+  const router         = useRouter()
+  const showToast      = useStore(s => s.showToast)
+  const setCurrentUser = useStore(s => s.setCurrentUser)
   const [firstName, setFirstName] = useState('')
   const [lastName,  setLastName]  = useState('')
   const [email,     setEmail]     = useState('')
@@ -34,8 +36,10 @@ export default function SignupPage() {
     setShowCompletion(true)
   }
 
-  const handleCompletionDone = () => {
+  const handleCompletionDone = async () => {
     setShowCompletion(false)
+    const profile = await getMyProfile()
+    if (profile) setCurrentUser(profileToUser(profile))
     router.push('/feed')
   }
 

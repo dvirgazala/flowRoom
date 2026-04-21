@@ -824,6 +824,15 @@ export default function FeedPage() {
           </div>
         )}
 
+        {/* ── Empty state ─────────────────────────────────────────────────── */}
+        {!loadingPosts && posts.length === 0 && (
+          <div className="bg-bg1 rounded-2xl shadow-surface p-12 text-center">
+            <Music size={36} className="text-text-muted mx-auto mb-3" />
+            <p className="text-text-secondary text-sm mb-1">הפיד ריק כרגע</p>
+            <p className="text-text-muted text-xs">עקוב אחר יוצרים או פרסם את הפוסט הראשון שלך</p>
+          </div>
+        )}
+
         {/* ── Posts ───────────────────────────────────────────────────────── */}
         {!loadingPosts && posts.map(post => {
           const author = findUser(post.userId)
