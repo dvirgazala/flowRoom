@@ -2,7 +2,7 @@
 // Hand-maintained — keep in sync with the SQL file.
 
 export type Privacy = 'public' | 'friends' | 'private'
-export type NotificationType = 'like' | 'comment' | 'follow' | 'mention' | 'room_invite' | 'split_request' | 'room_admin'
+export type NotificationType = 'like' | 'comment' | 'follow' | 'mention' | 'room_invite' | 'split_request' | 'room_admin' | 'split_locked'
 export type ActivityType = 'join' | 'stem' | 'stage' | 'chat' | 'action'
 
 export interface DbProfile {
@@ -127,6 +127,46 @@ export interface DbNotification {
   message: string
   read: boolean
   created_at: string
+}
+
+export interface DbSplitSheet {
+  id: string
+  room_id: string
+  track_title: string
+  isrc: string | null
+  iswc: string | null
+  status: 'draft' | 'pending_signatures' | 'locked'
+  version: number
+  created_by: string
+  created_at: string
+  locked_at: string | null
+}
+
+export interface DbSplitParticipant {
+  id: string
+  sheet_id: string
+  category: 'publishing' | 'master' | 'producer'
+  user_id: string
+  share_pct: number
+  role: string | null
+  has_signed: boolean
+  signed_at: string | null
+}
+
+export interface DbSplitRegistration {
+  id: string
+  sheet_id: string
+  body: 'acum' | 'pil' | 'eshkolot' | 'distributor' | 'youtube-cid'
+  status: 'not_registered' | 'pending' | 'registered' | 'rejected'
+  reference: string | null
+  notes: string | null
+  submitted_at: string | null
+  registered_at: string | null
+}
+
+export interface FullSplitSheet extends DbSplitSheet {
+  participants: (DbSplitParticipant & { profile: DbProfile })[]
+  registrations: DbSplitRegistration[]
 }
 
 export interface DbStory {

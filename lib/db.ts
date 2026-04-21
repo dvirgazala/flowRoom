@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import type {
   DbProfile, DbPost, DbComment, DbRoom, DbRoomMember, DbRoomMessage,
   DbRoomStem, DbRoomTask, DbDirectMessage, DbNotification,
+  DbSplitSheet, DbSplitParticipant, DbSplitRegistration, FullSplitSheet,
   Privacy, NotificationType,
 } from './supabase-types'
 
@@ -457,6 +458,192 @@ export async function removeMember(roomId: string, userId: string) {
 
 export async function updateMemberRole(roomId: string, userId: string, role: string) {
   return supabase.from('room_members').update({ role }).match({ room_id: roomId, user_id: userId })
+}
+
+// ============================================================
+// SPLIT SHEETS
+// ============================================================
+const SPLIT_BODIES = ['acum', 'pil', 'eshkolot', 'distributor', 'youtube-cid'] as const
+const SPLIT_CATEGORIES = ['publishing', 'master', 'producer'] as const
+
+export async function getSplitSheet(roomId: string): Promise<FullSplitSheet | null> {
+  const { data: sheet } = await supabase
+    .from('split_sheets').select('*').eq('room_id', roomId).maybeSingle()
+  if (!sheet) return null
+
+  const [{ data: participants }, { data: registrations }] = await Promise.all([
+    supabase.from('split_participants')
+      .select('*, profile:profiles!split_participants_user_id_fkey(*)')
+      .eq('sheet_id', sheet.id)
+      .order('category').order('share_pct', { ascending: false }),
+    supabase.from('split_registrations')
+      .select('*').eq('sheet_id', sheet.id),
+  ])
+
+  return {
+    ...(sheet as DbSplitSheet),
+    participants: ((participants ?? []) as unknown) as (DbSplitParticipant & { profile: DbProfile })[],
+    registrations: (registrations ?? []) as DbSplitRegistration[],
+  }
+}
+
+export async function getOrCreateSplitSheet(roomId: string, trackTitle: string): Promise<FullSplitSheet | null> {
+  const session = await getSession(); if (!session) return null
+
+  const existing = await getSplitSheet(roomId)
+  if (existing) return existing
+
+  const { data: sheet, error } = await supabase
+    .from('split_sheets')
+    .insert({ room_id: roomId, track_title: trackTitle, created_by: session.user.id })
+    .select().single()
+  if (error || !sheet) return null
+
+  const members = await getRoomMembers(roomId)
+  const count = members.length || 1
+  const evenShare = Math.floor(100 / count)
+  const remainder = 100 - evenShare * count
+
+  const participantRows: { sheet_id: string; category: string; user_id: string; share_pct: number; role: string }[] = []
+  for (const cat of SPLIT_CATEGORIES) {
+    const defaultRole = cat === 'publishing' ? 'composition' : cat === 'master' ? 'performer' : 'producer'
+    members.forEach((m, i) => {
+      participantRows.push({
+        sheet_id: sheet.id,
+        category: cat,
+        user_id: m.user_id,
+        share_pct: evenShare + (i === 0 ? remainder : 0),
+        role: defaultRole,
+      })
+    })
+  }
+  if (participantRows.length > 0) {
+    await supabase.from('split_participants').insert(participantRows)
+  }
+
+  const regRows = SPLIT_BODIES.map(body => ({
+    sheet_id: sheet.id, body, status: 'not_registered' as const,
+  }))
+  await supabase.from('split_registrations').insert(regRows)
+
+  return getSplitSheet(roomId)
+}
+
+export async function getMySheets(): Promise<FullSplitSheet[]> {
+  const session = await getSession(); if (!session) return []
+
+  const { data: myRows } = await supabase
+    .from('split_participants').select('sheet_id').eq('user_id', session.user.id)
+  const { data: createdRows } = await supabase
+    .from('split_sheets').select('id').eq('created_by', session.user.id)
+
+  const ids = new Set([
+    ...(myRows ?? []).map(r => r.sheet_id),
+    ...(createdRows ?? []).map(r => r.id),
+  ])
+  if (ids.size === 0) return []
+
+  const { data: sheets } = await supabase
+    .from('split_sheets').select('*').in('id', [...ids]).order('created_at', { ascending: false })
+  if (!sheets || sheets.length === 0) return []
+
+  const sheetIds = sheets.map(s => s.id)
+  const [{ data: participants }, { data: registrations }] = await Promise.all([
+    supabase.from('split_participants')
+      .select('*, profile:profiles!split_participants_user_id_fkey(*)')
+      .in('sheet_id', sheetIds),
+    supabase.from('split_registrations').select('*').in('sheet_id', sheetIds),
+  ])
+
+  return (sheets as DbSplitSheet[]).map(sheet => ({
+    ...sheet,
+    participants: (((participants ?? []) as unknown) as (DbSplitParticipant & { profile: DbProfile })[])
+      .filter(p => p.sheet_id === sheet.id),
+    registrations: ((registrations ?? []) as DbSplitRegistration[])
+      .filter(r => r.sheet_id === sheet.id),
+  }))
+}
+
+export async function updateSplitSheetMeta(sheetId: string, meta: { track_title?: string; isrc?: string | null; iswc?: string | null }) {
+  return supabase.from('split_sheets').update(meta).eq('id', sheetId)
+}
+
+export async function upsertSplitParticipants(
+  sheetId: string,
+  category: 'publishing' | 'master' | 'producer',
+  rows: { user_id: string; share_pct: number; role: string }[],
+) {
+  // Delete existing for this category, then re-insert
+  await supabase.from('split_participants').delete().match({ sheet_id: sheetId, category })
+  if (rows.length === 0) return
+  const inserts = rows.map(r => ({ sheet_id: sheetId, category, ...r }))
+  await supabase.from('split_participants').insert(inserts)
+  const { data: cur } = await supabase.from('split_sheets').select('version').eq('id', sheetId).single()
+  await supabase.from('split_sheets')
+    .update({ status: 'pending_signatures', version: (cur?.version ?? 1) + 1 })
+    .eq('id', sheetId)
+}
+
+export async function signSplitSheet(sheetId: string): Promise<boolean> {
+  const session = await getSession(); if (!session) return false
+  const now = new Date().toISOString()
+
+  await supabase.from('split_participants')
+    .update({ has_signed: true, signed_at: now })
+    .match({ sheet_id: sheetId, user_id: session.user.id })
+
+  // Check if all participants have signed
+  const { data: allParts } = await supabase
+    .from('split_participants').select('has_signed').eq('sheet_id', sheetId)
+  const allSigned = (allParts ?? []).every(p => p.has_signed)
+
+  if (allSigned) {
+    await supabase.from('split_sheets')
+      .update({ status: 'locked', locked_at: now }).eq('id', sheetId)
+    return true // locked
+  }
+  await supabase.from('split_sheets').update({ status: 'pending_signatures' }).eq('id', sheetId)
+  return false
+}
+
+export async function notifySplitLocked(sheetId: string, trackTitle: string) {
+  const session = await getSession(); if (!session) return
+  const { data: parts } = await supabase
+    .from('split_participants').select('user_id').eq('sheet_id', sheetId)
+  if (!parts) return
+
+  const uniqueUserIds = [...new Set(parts.map(p => p.user_id))]
+  const notifs = uniqueUserIds
+    .filter(uid => uid !== session.user.id)
+    .map(uid => ({
+      user_id: uid,
+      from_user_id: session.user.id,
+      type: 'split_locked' as const,
+      message: `Split Sheet של "${trackTitle}" נעול — זמן לרשום ב-ACUM ובהפיל`,
+    }))
+  if (notifs.length > 0) {
+    await supabase.from('notifications').insert(notifs)
+  }
+}
+
+export async function submitSplitRegistration(sheetId: string, body: string) {
+  const now = new Date().toISOString()
+  await supabase.from('split_registrations')
+    .update({ status: 'pending', submitted_at: now })
+    .match({ sheet_id: sheetId, body })
+}
+
+export async function markSplitRegistered(sheetId: string, body: string, reference: string) {
+  const now = new Date().toISOString()
+  await supabase.from('split_registrations')
+    .update({ status: 'registered', registered_at: now, reference })
+    .match({ sheet_id: sheetId, body })
+}
+
+export async function resetSplitRegistration(sheetId: string, body: string) {
+  await supabase.from('split_registrations')
+    .update({ status: 'not_registered', submitted_at: null, registered_at: null, reference: null })
+    .match({ sheet_id: sheetId, body })
 }
 
 // ============================================================
