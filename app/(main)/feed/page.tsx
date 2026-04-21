@@ -2,7 +2,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { USERS, getUserById } from '@/lib/data'
 import * as db from '@/lib/db'
 import type { PostWithAuthor, CommentWithAuthor } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
@@ -111,13 +110,14 @@ const PRIVACY_OPTIONS = [
 
 export default function FeedPage() {
   const { currentUser, posts: storePosts, users, likePost, addComment: storeAddComment, likeComment, dislikeComment, addPost, updatePost, deletePost: storeDeletePost, showToast } = useStore()
-  const user = currentUser || USERS[0]
+  const user = currentUser ?? users[0] ?? null
 
   // ── DB-backed feed state ───────────────────────────────────────────────────
   const [dbPosts, setDbPosts] = useState<FeedPost[] | null>(null)
   const [authorCache, setAuthorCache] = useState<Record<string, User>>({})
   const [commentsMap, setCommentsMap] = useState<Record<string, FeedComment[]>>({})
   const [loadingPosts, setLoadingPosts] = useState(hasSupabase)
+  const [suggestedUsers, setSuggestedUsers] = useState<User[]>([])
 
   // Stories
   const [stories, setStories] = useState<StoryWithAuthor[]>([])
@@ -128,7 +128,7 @@ export default function FeedPage() {
   const posts = dbPosts ?? storePosts
 
   const findUser = useCallback((id: string): User | undefined => {
-    return authorCache[id] || users.find(u => u.id === id) || getUserById(id)
+    return authorCache[id] || users.find(u => u.id === id)
   }, [authorCache, users])
 
   // Load stories
@@ -136,6 +136,18 @@ export default function FeedPage() {
     if (!hasSupabase) return
     db.getActiveStories().then(setStories).catch(() => {})
   }, [])
+
+  // Load suggested users
+  useEffect(() => {
+    if (!hasSupabase) return
+    db.listAllProfiles(8).then(profiles => {
+      const filtered = profiles
+        .filter(p => p.id !== currentUser?.id)
+        .slice(0, 4)
+        .map(profileToUser)
+      setSuggestedUsers(filtered)
+    }).catch(() => {})
+  }, [currentUser?.id])
 
   // Initial load from DB
   useEffect(() => {
@@ -258,8 +270,7 @@ export default function FeedPage() {
   const [applyBio, setApplyBio] = useState('')
   const [applyQuestion, setApplyQuestion] = useState('')
 
-  const suggested = USERS.filter(u => u.id !== user.id).slice(0, 4)
-  const filteredMentions = USERS.filter(u =>
+  const filteredMentions = Object.values(authorCache).filter(u =>
     !mentionFilter || u.name.includes(mentionFilter)
   ).slice(0, 6)
   const contextHashtags = getContextHashtags(newPost, hashtagFilter)
@@ -574,10 +585,16 @@ export default function FeedPage() {
     storyGroupMap[s.user_id].stories.push(s)
   })
   const storyGroups: StoryGroup[] = Object.values(storyGroupMap).sort((a, b) => {
-    if (a.userId === user.id) return -1
-    if (b.userId === user.id) return 1
+    if (a.userId === user?.id) return -1
+    if (b.userId === user?.id) return 1
     return a.stories.some(s => !s.viewed_by_me) ? -1 : 1
   })
+
+  if (!user) return (
+    <div className="flex items-center justify-center py-32">
+      <Loader2 size={28} className="animate-spin text-purple" />
+    </div>
+  )
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-6 flex gap-6">
@@ -1099,7 +1116,7 @@ export default function FeedPage() {
             <p className="text-sm font-semibold">מוצע עבורך</p>
           </div>
           <div className="space-y-3">
-            {suggested.map(u => (
+            {suggestedUsers.map(u => (
               <div key={u.id} className="flex items-center gap-2">
                 <Link href={`/profile/${u.id}`}>
                   <Avatar user={u} size="sm" showOnline />

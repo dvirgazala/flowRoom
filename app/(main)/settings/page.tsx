@@ -3,7 +3,6 @@ import { useState, useRef } from 'react'
 import { useStore } from '@/lib/store'
 import Avatar from '@/components/Avatar'
 import VerifiedBadge from '@/components/VerifiedBadge'
-import { USERS } from '@/lib/data'
 import * as db from '@/lib/db'
 import { Shield, CreditCard, User, Lock, CheckCircle2, Clock, Upload, Phone, IdCard, Music2, Moon, Sun, Loader2 } from 'lucide-react'
 
@@ -24,16 +23,15 @@ const BANKS = ['בנק הפועלים', 'בנק לאומי', 'בנק דיסקו�
 
 export default function SettingsPage() {
   const { currentUser, updateCurrentUser, showToast, theme, setTheme } = useStore()
-  const user = currentUser || USERS[0]
   const [tab, setTab] = useState<Tab>('general')
 
   // General tab state
-  const [displayName, setDisplayName] = useState(user.name)
-  const [bioText, setBioText] = useState(user.bio || '')
-  const [locationText, setLocationText] = useState(user.location || '')
+  const [displayName, setDisplayName] = useState(currentUser?.name ?? '')
+  const [bioText, setBioText] = useState(currentUser?.bio ?? '')
+  const [locationText, setLocationText] = useState(currentUser?.location ?? '')
   const [savingProfile, setSavingProfile] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatarUrl || null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(currentUser?.avatarUrl ?? null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const handleAvatarChange = (file: File) => {
@@ -45,7 +43,8 @@ export default function SettingsPage() {
   const saveProfile = async () => {
     if (!displayName.trim()) { showToast('שם לא יכול להיות ריק', 'error'); return }
     setSavingProfile(true)
-    let newAvatarUrl = user.avatarUrl
+    if (!currentUser) return
+    let newAvatarUrl = currentUser.avatarUrl
 
     if (avatarFile && hasSupabase) {
       const url = await db.uploadFile(avatarFile, 'avatars')
@@ -53,11 +52,11 @@ export default function SettingsPage() {
     }
 
     if (hasSupabase) {
-      await db.updateProfile(user.id, {
+      await db.updateProfile(currentUser.id, {
         display_name: displayName.trim(),
         bio: bioText.trim(),
         location: locationText.trim(),
-        ...(newAvatarUrl && newAvatarUrl !== user.avatarUrl ? { avatar_url: newAvatarUrl } : {}),
+        ...(newAvatarUrl && newAvatarUrl !== currentUser.avatarUrl ? { avatar_url: newAvatarUrl } : {}),
       })
     }
 
@@ -83,7 +82,7 @@ export default function SettingsPage() {
   const [bank, setBank] = useState('')
   const [branch, setBranch] = useState('')
   const [account, setAccount] = useState('')
-  const [accountName, setAccountName] = useState(user.name)
+  const [accountName, setAccountName] = useState(currentUser?.name ?? '')
   const [bankSaved, setBankSaved] = useState(false)
 
   const doneCount = steps.filter(s => s.done).length
@@ -139,14 +138,14 @@ export default function SettingsPage() {
                 <div className="relative">
                   {avatarPreview
                     ? <img src={avatarPreview} alt="" className="w-16 h-16 rounded-full object-cover ring-2 ring-purple/30" />
-                    : <Avatar user={{ ...user, avatarUrl: undefined }} size="xl" />}
+                    : <Avatar user={{ ...currentUser, avatarUrl: undefined } as any} size="xl" />}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-bold text-lg">{displayName}</p>
-                    {user.isVerified && <VerifiedBadge size={16} />}
+                    {currentUser?.isVerified && <VerifiedBadge size={16} />}
                   </div>
-                  <p className="text-text-muted text-sm">{user.role} · {locationText || 'הוסף מיקום'}</p>
+                  <p className="text-text-muted text-sm">{currentUser?.role} · {locationText || 'הוסף מיקום'}</p>
                   <button onClick={() => avatarInputRef.current?.click()}
                     className="mt-2 text-xs text-purple hover:underline flex items-center gap-1">
                     <Upload size={12} /> שנה תמונת פרופיל
@@ -162,7 +161,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="block text-xs text-text-secondary mb-1.5">אימייל</label>
-                <input defaultValue={user.email} placeholder="אימייל" disabled
+                <input defaultValue={currentUser?.email ?? ''} placeholder="אימייל" disabled
                   className="w-full bg-bg3 border border-border rounded-xl px-4 py-3 text-sm opacity-60 cursor-not-allowed" />
               </div>
               <div>
@@ -249,7 +248,7 @@ export default function SettingsPage() {
               <div className="bg-bg1 rounded-2xl p-5 shadow-surface">
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="font-semibold">אימות חשבון</h2>
-                  {user.isVerified ? (
+                  {currentUser?.isVerified ? (
                     <span className="flex items-center gap-1.5 text-success text-sm"><VerifiedBadge size={15} /> מאומת</span>
                   ) : (
                     <span className="text-xs text-text-muted">{doneCount}/{steps.length} שלבים</span>

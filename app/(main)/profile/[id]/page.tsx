@@ -2,10 +2,10 @@
 import { use, useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { USERS, getUserById } from '@/lib/data'
 import * as db from '@/lib/db'
 import type { PostWithAuthor } from '@/lib/db'
-import { relativeTime } from '@/lib/profile-utils'
+import { profileToUser, relativeTime } from '@/lib/profile-utils'
+import type { User } from '@/lib/types'
 import Avatar from '@/components/Avatar'
 import AudioPlayer from '@/components/AudioPlayer'
 import VerifiedBadge from '@/components/VerifiedBadge'
@@ -21,8 +21,29 @@ import {
 
 export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { currentUser, showToast, users } = useStore()
-  const user = users.find(u => u.id === id) || getUserById(id) || USERS[0]
+  const { currentUser, showToast } = useStore()
+
+  // Profile data from Supabase
+  const [user, setUser] = useState<User | null>(
+    id === currentUser?.id ? currentUser : null
+  )
+  const [loadingProfile, setLoadingProfile] = useState(
+    hasSupabase && id !== currentUser?.id
+  )
+
+  useEffect(() => {
+    if (!hasSupabase) return
+    db.getProfileById(id).then(p => {
+      if (p) {
+        const u = profileToUser(p)
+        setUser(u)
+        setFollowersCount(u.followers)
+        setMediaItems(u.media ?? [])
+      }
+      setLoadingProfile(false)
+    }).catch(() => setLoadingProfile(false))
+  }, [id])
+
   const [activeTab, setActiveTab] = useState<'portfolio' | 'media' | 'collabs' | 'about' | 'posts'>('portfolio')
 
   // Real posts from DB
@@ -33,16 +54,16 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
 
   // Follow state
   const [following, setFollowing] = useState<boolean | null>(null)
-  const [followersCount, setFollowersCount] = useState(user.followers)
+  const [followersCount, setFollowersCount] = useState(0)
   const [followLoading, setFollowLoading] = useState(false)
 
   // Media state
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>(user.media ?? [])
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [lightbox, setLightbox] = useState<{ item: MediaItem; index: number } | null>(null)
   const [showUpload, setShowUpload] = useState(false)
   const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video' | 'reel'>('all')
 
-  const isMe = currentUser?.id === user.id
+  const isMe = currentUser?.id === id
 
   // Load follow state from DB
   useEffect(() => {
@@ -69,7 +90,7 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
       await db.followUser(id)
       setFollowing(true)
       setFollowersCount(c => c + 1)
-      showToast(`עוקב אחרי ${user.name.split(' ')[0]}! 🎵`, 'success')
+      showToast(`עוקב אחרי ${user?.name.split(' ')[0]}! 🎵`, 'success')
       db.createNotification({ userId: id, fromUserId: currentUser.id, type: 'follow' })
     }
     setFollowLoading(false)
@@ -84,6 +105,18 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
       window.scrollTo({ top, behavior: 'auto' })
     })
   }
+
+  if (loadingProfile) return (
+    <div className="flex items-center justify-center py-32">
+      <Loader2 size={28} className="animate-spin text-purple" />
+    </div>
+  )
+
+  if (!user) return (
+    <div className="max-w-4xl mx-auto px-4 py-24 text-center">
+      <p className="text-text-secondary text-sm">המשתמש לא נמצא</p>
+    </div>
+  )
 
   const stats = [
     { label: 'שירים',    value: user.songs },
@@ -387,22 +420,10 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
 
       {/* ── Collabs ───────────────────────────────────────────────────────────── */}
       {activeTab === 'collabs' && (
-        <div className="bg-bg1 rounded-2xl shadow-surface p-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {USERS.filter(u => u.id !== user.id).slice(0, 6).map(collaborator => (
-              <Link key={collaborator.id} href={`/profile/${collaborator.id}`}
-                className="flex flex-col items-center gap-2 p-4 bg-bg3 rounded-2xl hover:bg-bg2 transition-colors group">
-                <Avatar user={collaborator} size="lg" showOnline />
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <p className="font-medium text-sm group-hover:text-purple transition-colors">{collaborator.name}</p>
-                    {collaborator.isVerified && <VerifiedBadge size={13} />}
-                  </div>
-                  <p className="text-text-muted text-xs">{collaborator.role}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
+        <div className="bg-bg1 rounded-2xl shadow-surface p-12 text-center">
+          <Users size={32} className="text-text-muted mx-auto mb-3" />
+          <p className="text-text-secondary text-sm mb-1">אין שיתופי פעולה עדיין</p>
+          <p className="text-text-muted text-xs">שיתופי פעולה יופיעו כאן לאחר שתסיים פרויקטים משותפים</p>
         </div>
       )}
 

@@ -2,7 +2,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { useStore } from '@/lib/store'
-import { USERS } from '@/lib/data'
 import * as db from '@/lib/db'
 import { profileToUser } from '@/lib/profile-utils'
 import type { User } from '@/lib/types'
@@ -41,14 +40,13 @@ export default function DiscoverPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [sortBy, setSortBy] = useState<'rating' | 'followers' | 'trust' | 'online'>('rating')
 
-  // Real users from DB (falls back to seed data)
-  const [allUsers, setAllUsers] = useState<User[]>(() => USERS)
+  const [allUsers, setAllUsers] = useState<User[]>([])
   const [loadingUsers, setLoadingUsers] = useState(hasSupabase)
 
   useEffect(() => {
     if (!hasSupabase) return
     db.listAllProfiles(100).then(profiles => {
-      if (profiles.length > 0) setAllUsers(profiles.map(profileToUser))
+      setAllUsers(profiles.map(profileToUser))
       setLoadingUsers(false)
     }).catch(() => setLoadingUsers(false))
   }, [])
